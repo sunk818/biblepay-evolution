@@ -118,13 +118,13 @@ int miGlobalPrayerIndex = 0;
 int miGlobalDiaryIndex = 0;
 int iMinerThreadCount = 0;
 int nProposalPrepareHeight = 0;
-int nHashCounter = 0;
+double nHashCounter = 0;
 int nProposalModulus = 0;
 int64_t nLastDCContractSubmitted = 0;
 int64_t nHPSTimerStart = 0;
 int64_t nBibleMinerPulse = 0;
 int64_t nProposalStartTime = 0;
-
+double nHashPerSecondCalibration = 7500;
 double dHashesPerSec = 0;
 uint256 uTxIdFee = uint256S("0x0");
 
@@ -139,6 +139,7 @@ std::string msProposalHex;
 std::string msGlobalStatus;
 std::string msGlobalStatus2;
 std::string msGlobalStatus3;
+std::string msURL;
 SecureString msEncryptedString = "";
 
 // END OF BIBLEPAY
@@ -626,7 +627,8 @@ bool ContextualCheckTransaction(const CTransaction& tx, CValidationState &state,
                 tx.nType != TRANSACTION_PROVIDER_UPDATE_REGISTRAR &&
                 tx.nType != TRANSACTION_PROVIDER_UPDATE_REVOKE &&
                 tx.nType != TRANSACTION_COINBASE &&
-                tx.nType != TRANSACTION_QUORUM_COMMITMENT) {
+                tx.nType != TRANSACTION_QUORUM_COMMITMENT &&
+				tx.nType != TRANSACTION_NON_FINANCIAL) {
                 return state.DoS(100, false, REJECT_INVALID, "bad-txns-type");
             }
             if (tx.IsCoinBase() && tx.nType != TRANSACTION_COINBASE)
@@ -4919,6 +4921,35 @@ void KillBlockchainFiles()
 	boost::filesystem::path pathMncache = GetDataDir() / "mncache.dat";
 	if(boost::filesystem::exists(pathMncache)) boost::filesystem::remove(pathMncache); 
 }  
+
+void ConnectNonFinancialTransactions(const CBlock& block, const CBlockIndex* pindexPrev, const Consensus::Params& consensusParams)
+{
+    int nHeight = pindexPrev == NULL ? 0 : pindexPrev->nHeight + 1;
+    bool fDIP0003Active_context = VersionBitsState(pindexPrev, consensusParams, Consensus::DEPLOYMENT_DIP0003, versionbitscache) == THRESHOLD_ACTIVE;
+    if (fDIP0003Active_context) 
+	{
+		for (const auto& tx : block.vtx) 
+		{
+			CTransaction ctx = *tx;
+		    if (ctx.nType == TRANSACTION_NON_FINANCIAL)
+			{
+				CValidationState state;
+				bool fValid = CheckNonFinancialTx(ctx, pindexPrev, state);
+				if (fValid)
+				{
+					CNonFinancialTx ptx;
+					if (GetTxPayload(ctx, ptx)) 
+					{
+						LogPrintf("Non-Financial Transaction %s %s %s\n", ptx.sObjectType, ptx.sKey, ptx.sValue);
+						// Store here.
+					}
+				}
+			}
+		}
+	}
+}
+
+
 
 // END OF BIBLEPAY
 

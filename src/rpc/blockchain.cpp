@@ -1798,7 +1798,6 @@ UniValue GetVersionReport()
 	return ret;
 }
 
-
 UniValue exec(const JSONRPCRequest& request)
 {
     if (request.fHelp || (request.params.size() != 1 && request.params.size() != 2  && request.params.size() != 3 && request.params.size() != 4 
@@ -1944,6 +1943,11 @@ UniValue exec(const JSONRPCRequest& request)
 			results.push_back(Pair(sBookName, sReversed));
 		}
 	}
+	else if (sItem == "ipfstest1")
+	{
+		std::string sResult = BiblePayHTTPSPost2(true, "5001", "192.168.0.153", "BiblePayGui/Welcome", "na", "gear.png");
+		results.push_back(Pair("result", sResult));
+	}
 	else if (sItem == "testgscvote")
 	{
 		int iNextSuperblock = 0;
@@ -1979,6 +1983,11 @@ UniValue exec(const JSONRPCRequest& request)
 			results.push_back(Pair("quorum_gobject_trigger_hash", sGobjectHash));
 			results.push_back(Pair("quorum_error", sError));
 		}
+		results.push_back(Pair("protocol_version", PROTOCOL_VERSION));
+		double nMinGSCProtocolVersion = GetSporkDouble("MIN_GSC_PROTO_VERSION", 0);
+		bool bVersionSufficient = (PROTOCOL_VERSION >= nMinGSCProtocolVersion);
+		results.push_back(Pair("min_gsc_proto_version", nMinGSCProtocolVersion));
+		results.push_back(Pair("version_sufficient", bVersionSufficient));
 		results.push_back(Pair("votes_for_my_contract", iVotes));
 		int iRequiredVotes = GetRequiredQuorumLevel(iNextSuperblock);
 		results.push_back(Pair("required_votes", iRequiredVotes));
@@ -2189,6 +2198,70 @@ UniValue exec(const JSONRPCRequest& request)
 		results.push_back(Pair("Results", fAdv));
 		if (!fAdv)
 			results.push_back(Pair("Error", sError));
+	}
+	else if (sItem == "sendmanyxml")
+	{
+		// BiblePay Pools: Allows pools to send a multi-output tx with ease
+		// Format: exec sendmanyxml from_account xml_payload comment
+		LOCK2(cs_main, pwalletMain->cs_wallet);
+		std::string strAccount = request.params[1].get_str();
+		if (strAccount == "*")
+			throw JSONRPCError(RPC_WALLET_INVALID_ACCOUNT_NAME, "Invalid account name");
+		std::string sXML = request.params[2].get_str();
+		int nMinDepth = 1;
+		CWalletTx wtx;
+		wtx.strFromAccount = strAccount;
+		wtx.mapValue["comment"] = request.params[3].get_str();
+		std::set<CBitcoinAddress> setAddress;
+		std::vector<CRecipient> vecSend;
+		CAmount totalAmount = 0;
+		std::string sRecipients = ExtractXML(sXML, "<RECIPIENTS>","</RECIPIENTS>");
+		std::vector<std::string> vRecips = Split(sRecipients.c_str(), "<ROW>");
+		for (int i = 0; i < (int)vRecips.size(); i++)
+		{
+			std::string sRecip = vRecips[i];
+			if (!sRecip.empty())
+			{
+				std::string sRecipient = ExtractXML(sRecip, "<RECIPIENT>","</RECIPIENT>");
+				double dAmount = cdbl(ExtractXML(sRecip,"<AMOUNT>","</AMOUNT>"),4);
+				if (!sRecipient.empty() && dAmount > 0)
+				{
+ 					  CBitcoinAddress address(sRecipient);
+	   		   	      if (!address.IsValid())
+						  throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Biblepay address: ") + sRecipient);
+					  if (setAddress.count(address))
+						  throw JSONRPCError(RPC_INVALID_PARAMETER, std::string("Invalid parameter, duplicated address: ") + sRecipient);
+					  setAddress.insert(address);
+					  CScript scriptPubKey = GetScriptForDestination(address.Get());
+					  CAmount nAmount = dAmount * COIN;
+					  if (nAmount <= 0) 
+						  throw JSONRPCError(RPC_TYPE_ERROR, "Invalid amount for send");
+					  totalAmount += nAmount;
+					  bool fSubtractFeeFromAmount = false;
+				      CRecipient recipient = {scriptPubKey, nAmount, false, fSubtractFeeFromAmount};
+					  vecSend.push_back(recipient);
+				}
+			}
+		}
+		EnsureWalletIsUnlocked();
+		// Check funds
+		CAmount nBalance = pwalletMain->GetAccountBalance(strAccount, nMinDepth, ISMINE_SPENDABLE, false);
+		if (totalAmount > nBalance)
+			throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Account has insufficient funds");
+		// Send
+		CReserveKey keyChange(pwalletMain);
+		CAmount nFeeRequired = 0;
+		int nChangePosRet = -1;
+		std::string strFailReason;
+		bool fUseInstantSend = false;
+		bool fUsePrivateSend = false;
+		CValidationState state;
+		bool fCreated = pwalletMain->CreateTransaction(vecSend, wtx, keyChange, nFeeRequired, nChangePosRet, strFailReason, NULL, true, fUsePrivateSend ? ONLY_DENOMINATED : ALL_COINS, fUseInstantSend);
+		if (!fCreated)
+			throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, strFailReason);
+		if (!pwalletMain->CommitTransaction(wtx, keyChange, g_connman.get(), state, NetMsgType::TX))
+			throw JSONRPCError(RPC_WALLET_ERROR, "Transaction commit failed");
+		results.push_back(Pair("txid", wtx.GetHash().GetHex()));
 	}
 	else if (sItem == "unjoin")
 	{
@@ -2434,7 +2507,7 @@ UniValue exec(const JSONRPCRequest& request)
 			throw std::runtime_error("Unable to fund protx_register fee: " + sError);
 
 		results.push_back(Pair("Summary", sSummary));
-		// Generate BLS keypair (This is the keypair for the sanctuary - the BLS public key goes in the chain, the private key goes into the Sanctuaries biblepay.conf file like this:  blsprivkey=nnnnn
+		// Generate BLS keypair (This is the keypair for the sanctuary - the BLS public key goes in the chain, the private key goes into the Sanctuaries biblepay.conf file like this: masternodeblsprivkey=nnnnn
 		JSONRPCRequest myBLS;
 		myBLS.params.setArray();
 		myBLS.params.push_back("generate");
@@ -2498,6 +2571,62 @@ UniValue exec(const JSONRPCRequest& request)
 		std::string sDSD = sSancName + " " + sSancIP + " " + myBLSPublic + " " + myBLSPrivate + " " + sCollateralTXID + " " + sCollateralTXIDOrdinal + " " + sProRegTxId + " " + sProCollAddr + " " + sSentTxId + "\n";
 		if (iDryRun == 1)
 			AppendSanctuaryFile("deterministic.conf", sDSD);
+	}
+	else if (sItem == "navtest_devsonly")
+	{
+		// ** This command is strictly for testing only by the devs - please disregard **
+		// BiblePay - Purchase Plug-In API for web purchases
+		// The users Public-Funding-Address keypair contains the user funds they will purchase with (send test funds here)
+	    EnsureWalletIsUnlocked();
+		// We authenticate with the CPK (this allows sites to not require log-in credentials, and to know the users nickname)
+		// We DO NOT pass the CPKs private key outside of the wallet
+		std::string sCPK = DefaultRecAddress("Christian-Public-Key");
+		std::string sPFA = DefaultRecAddress("Public-Funding-Address");
+	    CBitcoinAddress pfaAddress;
+		if (!pfaAddress.SetString(sPFA))
+			throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Biblepay PFA address");
+		CKeyID keyID;
+		if (!pfaAddress.GetKeyID(keyID))
+			throw JSONRPCError(RPC_TYPE_ERROR, "PFA Address does not refer to a key; have you created a PFA Key?");
+		CKey vchSecret;
+		if (!pwalletMain->GetKey(keyID, vchSecret))
+			throw JSONRPCError(RPC_WALLET_ERROR, "Private key for address " + sPFA + " is not in wallet.  Please create a PFA key to continue.");
+		// This PrivKey will not be revealed to a sanctuary, or on the internet, but instead will be stored in a private place on the local computer, in the local browsers HTML5 local-storage database 
+		// and cannot be accessed by web sites or javascript scripting attacks (as the key is stored in a private namespace)
+		// PURPOSE: When the user decides to buy something from a BiblePay web-site, the BiblePay purchase api plugin will sign the purchase with this key (from local javascript in our namespace), then 
+		// we will only transmit the transaction itself to the network.  (This way the user can conveniently browse and securely buy things on the web).
+		// NOTE: The only private key we expose is "Public-Funding-Address", so be very careful and only fund this address with just enough BBP to complete test purchases.
+		std::string sPFA_PrivKey = CBitcoinSecret(vchSecret).ToString();
+		std::string sNonce = GetRandHash().GetHex();
+		std::string sSignature;
+		std::string sError;
+		bool bSigned = SignStake(sCPK, sNonce, sError, sSignature);
+		if (!bSigned || !sError.empty())
+			throw JSONRPCError(RPC_TYPE_ERROR, "Unable to sign CPK [" + sError + "]");
+		std::string sDestinationURL = "https://Unknown.com/purchase.aspx";
+		std::string sData = sCPK + "|" + sNonce + "|" + sSignature + "|" + sPFA + "|" + sPFA_PrivKey + "|" + sDestinationURL;
+		std::string sEncData = EncodeBase64(sData);
+		msURL = "http://192.168.0.153:5001/bbp_electrum.htm?data=" + sEncData;
+		// Launch the browser 
+		results.push_back(Pair("data", sData));
+	}
+	else if (sItem == "analyze")
+	{
+		if (request.params.size() != 3)
+			throw std::runtime_error("You must specify height and nickname.");
+		int nHeight = cdbl(request.params[1].get_str(), 0);
+		std::string sNickName = request.params[2].get_str();
+		WriteCache("analysis", "user", sNickName, GetAdjustedTime());
+		UniValue p = GetProminenceLevels(nHeight, false);
+		std::string sData1 = ReadCache("analysis", "data_1");
+		std::string sData2 = ReadCache("analysis", "data_2");
+		results.push_back(Pair("Totals", sData2));
+		std::vector<std::string> v = Split(sData1.c_str(), "\n");
+		for (int i = 0; i < (int)v.size(); i++)
+		{
+			std::string sRow = v[i];
+			results.push_back(Pair(RoundToString(i, 0), sRow));
+		}
 	}
 	else if (sItem == "datalist")
 	{

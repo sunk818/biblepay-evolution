@@ -1,11 +1,18 @@
 Build BiblePay Evolution - Ubuntu
 
 /* Optional:  How to increase swap space on a machine with 1gb of ram:
-free #check if swap is 0
-dd if=/dev/zero of=/var/swap.img bs=1024k count=1000
-mkswap /var/swap.img
-swapon /var/swap.img
-free #check if swap is 1024
+free #check if swap is 0 then do this:
+sudo fallocate -l 1G /swapfile
+sudo dd if=/dev/zero of=/swapfile bs=1024 count=1048576
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+sudo nano /etc/fstab
+#add this line:
+/swapfile swap swap defaults 0 0
+#save the file
+sudo swapon --show
+free #check - should be 1G
 */
 
 
@@ -21,7 +28,7 @@ sudo apt-get update
 sudo apt-get install libdb4.8-dev libdb4.8++-dev
 
 
-Building Daemon and QT:
+** Building Daemon and QT: **
 git clone http://github.com/biblepay/biblepay-evolution
 prefix=x86_64-pc-linux-gnu
 cd depends
@@ -35,14 +42,31 @@ See more here:
 https://github.com/biblepay/biblepay-evolution/blob/master/doc/build-unix.md
 
 
-How to upgrade BiblePay:
+** How to upgrade BiblePay: **
 cd ~/biblepay-evolution
 git pull origin master
 cd src
 make
 
 
-Evolution; Building Windows using Cross-Compile 64-bit version:
+*** NOTE:  
+Watchman-on-the-wall is no longer required in BiblePay-Evolution (as it is compiled as a part of our wallet now) ****
+
+
+*** TROUBLESHOOTING ****
+Q: What if I receive an error during ./autogen.sh?  Libtoolize failed AC_CONFIG_MACRO_DIRS([build-aux/m4]) conflicts with ACLOCAL.AMFLAGS=-I build-aux/m4?
+A: This is because some files were downloaded from git with CRLF.  Fix with:
+find . -name \*.m4|xargs dos2unix
+find . -name \*.ac|xargs dos2unix
+find . -name \*.am|xargs dos2unix
+find . -name \*.sh|xargs dos2unix
+
+
+
+
+**** DEVELOPER SECTION - FOR DEV USE ****
+
+Devs; Evolution; Building Windows using Cross-Compile 64-bit version:
 
 https://github.com/bitcoin/bitcoin/blob/master/doc/build-windows.md
 cd depends
@@ -54,20 +78,3 @@ cd src
 sudo make
 make deploy
 (deploy files in /biblepay-evolution)
-
-
-How to install Watchman on the Wall (Coming soon):
-sudo apt update
-sudo apt install git python-virtualenv virtualenv
-cd ~/.biblepaycore
-git clone https://github.com/biblepay/watchman.git
-cd watchman
-virtualenv venv
-venv/bin/pip install -r requirements.txt
-nano watchman.conf
-venv/bin/python bin/watchman.py
-
-Install Watchman in cron:
-crontab -e
-Add this line:
-* * * * * cd /home/YOURUSERNAME/watchman && ./venv/bin/python bin/watchman.py >/dev/null 2>&1

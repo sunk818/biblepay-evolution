@@ -54,14 +54,13 @@ UniValue GetCampaigns()
 	for (auto s : mCampaigns)
 	{
 		results.push_back(Pair("campaign " + s.first, s.first));
-	}
+	} 
 
 	results.push_back(Pair("List Of", "BiblePay CPKs"));
 	// List of Christian-Keypairs (Global members)
 	std::map<std::string, CPK> cp = GetGSCMap("cpk", "", true);
 	for (std::pair<std::string, CPK> a : cp)
 	{
-		// NON-CRITICAL TODO: Figure out why nickname is missing from GSCMap but not from GetCPKFromProject
 		CPK oPrimary = GetCPKFromProject("cpk", a.second.sAddress);
 		results.push_back(Pair("member [" + Caption(oPrimary.sNickName, 10) + "]", a.second.sAddress));
 	}
@@ -309,6 +308,10 @@ bool CreateClientSideTransaction(bool fForce, bool fDiaryProjectsOnly, std::stri
 		sError = "Sorry, you have selected diary projects only, but biblepay did not receive a diary entry.";
 		return false;
 	}
+	double nDisableClientSideTransmission = UserSetting("disablegsctransmission", 0);
+	if (nDisableClientSideTransmission == 1)
+		return false;
+				
 	// List of Campaigns
 	for (auto s : mCampaigns)
 	{
