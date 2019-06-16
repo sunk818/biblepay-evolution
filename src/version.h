@@ -1,5 +1,6 @@
 // Copyright (c) 2012-2014 The Bitcoin Core developers
-// Copyright (c) 2014-2017 The BiblePay Core developers
+// Copyright (c) 2014-2018 The Dash Core developers
+// Copyright (c) 2017-2019 The BiblePay Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -49,5 +50,12 @@ static const int SHORT_IDS_BLOCKS_VERSION = 70720;
 
 //! introduction of DIP3/deterministic masternodes
 static const int DMN_PROTO_VERSION = 70720;
+
+//! introduction of LLMQs
+static const int LLMQS_PROTO_VERSION = 70214;
+
+//! introduction of SENDDSQUEUE
+//! TODO we can remove this in 0.15.0.0
+static const int SENDDSQUEUE_PROTO_VERSION = 70214;
 
 #endif // BITCOIN_VERSION_H

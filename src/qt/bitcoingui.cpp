@@ -1,5 +1,6 @@
 // Copyright (c) 2011-2015 The Bitcoin Core developers
-// Copyright (c) 2014-2017 The BiblePay Core developers
+// Copyright (c) 2014-2019 The Dash Core developers
+// Copyright (c) 2017-2019 The BiblePay Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -484,8 +485,6 @@ void BitcoinGUI::createActions()
     openRepairAction->setStatusTip(tr("Show wallet repair options"));
     openConfEditorAction = new QAction(QIcon(":/icons/" + theme + "/edit"), tr("Open Wallet &Configuration File"), this);
     openConfEditorAction->setStatusTip(tr("Open configuration file"));
-    openMNConfEditorAction = new QAction(QIcon(":/icons/" + theme + "/edit"), tr("Open &Masternode Configuration File"), this);
-    openMNConfEditorAction->setStatusTip(tr("Open Masternode configuration file"));    
     showBackupsAction = new QAction(QIcon(":/icons/" + theme + "/browse"), tr("Show Automatic &Backups"), this);
     showBackupsAction->setStatusTip(tr("Show automatically created wallet backups"));
 
@@ -554,7 +553,6 @@ void BitcoinGUI::createActions()
 
     // Open configs and backup folder from menu
     connect(openConfEditorAction, SIGNAL(triggered()), this, SLOT(showConfEditor()));
-    connect(openMNConfEditorAction, SIGNAL(triggered()), this, SLOT(showMNConfEditor()));
     connect(showBackupsAction, SIGNAL(triggered()), this, SLOT(showBackups()));
 
     // Get restart command-line parameters and handle restart
@@ -633,7 +631,6 @@ void BitcoinGUI::createMenuBar()
         tools->addAction(openRepairAction);
         tools->addSeparator();
         tools->addAction(openConfEditorAction);
-        tools->addAction(openMNConfEditorAction);
         tools->addAction(showBackupsAction);
         tools->addAction(OneClickMiningAction);
     }
@@ -892,7 +889,6 @@ void BitcoinGUI::createIconMenu(QMenu *pmenu)
     pmenu->addAction(openRepairAction);
     pmenu->addSeparator();
     pmenu->addAction(openConfEditorAction);
-    pmenu->addAction(openMNConfEditorAction);
     pmenu->addAction(showBackupsAction);
 #ifndef Q_OS_MAC // This is built-in on Mac
     pmenu->addSeparator();
@@ -1076,11 +1072,6 @@ void BitcoinGUI::showRepair()
 void BitcoinGUI::showConfEditor()
 {
     GUIUtil::openConfigfile();
-}
-
-void BitcoinGUI::showMNConfEditor()
-{
-    GUIUtil::openMNConfigfile();
 }
 
 void BitcoinGUI::showBackups()

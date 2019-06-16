@@ -32,7 +32,7 @@ $ make HOST=x86_64-apple-darwin11 -j4
 When building BiblePay Core, use
 
 ```bash
-$ ./configure --prefix `pwd`/depends/x86_64-apple-darwin11
+$ ./configure --prefix=`pwd`/depends/x86_64-apple-darwin11
 ```
 
 Windows 64bit/32bit Cross-compilation
@@ -68,7 +68,7 @@ $ make HOST=x86_64-w64-mingw32 -j4
 When building BiblePay Core, use
 
 ```bash
-$ ./configure --prefix `pwd`/depends/x86_64-w64-mingw32
+$ ./configure --prefix=`pwd`/depends/x86_64-w64-mingw32
 ```
 
 These commands will build for Windows 64bit. If you want to compile for 32bit,
@@ -91,7 +91,7 @@ $ make HOST=arm-linux-gnueabihf -j4
 When building BiblePay Core, use
 
 ```bash
-$ ./configure --prefix `pwd`/depends/arm-linux-gnueabihf
+$ ./configure --prefix=`pwd`/depends/arm-linux-gnueabihf
 ```
 
 Linux 32-bit Cross-compilation in a Linux 64-bit system

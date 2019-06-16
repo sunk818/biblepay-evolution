@@ -32,7 +32,6 @@ class WalletFrame;
 class WalletModel;
 class HelpMessageDialog;
 class ModalOverlay;
-class MasternodeList;
 
 class CWallet;
 
@@ -138,7 +137,6 @@ private:
     QAction *openPeersAction;
     QAction *openRepairAction;
     QAction *openConfEditorAction;
-    QAction *openMNConfEditorAction;
     QAction *showBackupsAction;
     QAction *openAction;
     QAction *showHelpMessageAction;
@@ -290,8 +288,6 @@ private Q_SLOTS:
 
     /** Open external (default) editor with biblepay.conf */
     void showConfEditor();
-    /** Open external (default) editor with masternode.conf */
-    void showMNConfEditor();
     /** Show folder with wallet backups in default file browser */
     void showBackups();
 

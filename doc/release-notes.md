@@ -1,11 +1,11 @@
-Biblepay Core version 0.13.2.0
+Biblepay Core version 0.14.0.0
 ==========================
 
 Release is now available from:
 
   <https://www.biblepay.org/downloads/#wallets>
 
-This is a new minor version release, bringing various bugfixes and other improvements.
+This is a new minor version release, bringing various bugfixes.
 
 Please report bugs using the issue tracker at github:
 
@@ -20,6 +20,7 @@ How to Upgrade
 
 If you are running an older version, shut it down. Wait until it has completely
 shut down (which might take a few minutes for older versions), then run the
+<<<<<<< HEAD
 installer (on Windows) or just copy over /Applications/biblepay-Qt (on Mac) or
 biblepayd/biblepay-qt (on Linux). If you upgrade after DIP0003 activation you will
 have to reindex (start with -reindex-chainstate or -reindex) to make sure
@@ -28,78 +29,51 @@ your wallet has all the new data synced (only if you were using version < 0.13).
 Note that there is no protocol bump in this version and thus active masternodes
 updating from v0.13.0.0 or v0.13.1.0 do not require any additional actions (no need to issue
 `masternode start` command).
+=======
+installer (on Windows) or just copy over /Applications/Dash-Qt (on Mac) or
+dashd/dash-qt (on Linux). If you upgrade after DIP0003 activation and you were
+using version < 0.13 you will have to reindex (start with -reindex-chainstate
+or -reindex) to make sure your wallet has all the new data synced. Upgrading from
+version 0.13 should not require any additional actions.
+>>>>>>> 05adda99fe09f9f6d99ce09e22ed89be3ddfcd27
 
 Downgrade warning
 -----------------
 
 ### Downgrade to a version < 0.13.0.0
 
-Downgrading to a version smaller than 0.13 is not supported anymore as DIP2/DIP3 has activated
-on mainnet and testnet.
+Downgrading to a version smaller than 0.13 is not supported anymore as DIP2/DIP3 has
+activated on mainnet and testnet.
 
-### Downgrade to 0.13.0.0 or 0.13.1.0
+### Downgrade to versions 0.13.0.0 - 0.13.3.0
 
-Downgrading to 0.13.0.0 is fully supported but is not recommended unless you have some serious issues with 0.13.2.0.
+Downgrading to 0.13 releases is fully supported until DIP0008 activation but is not
+recommended unless you have some serious issues with version 0.14.
 
 Notable changes
 ===============
 
-Providing "masternodeblsprivkey" is now mandatory when the node is launched as a masternode ("masternode=1")
-------------------------------------------------------------------------
-In previous versions, "masternodeblsprivkey" was not mandatory as these versions had to function with and without DIP3
-activation. Now that DIP3 has activated on mainnet and testnet, we can make "masternodeblsprivkey" mandatory when
-configuring and running a masternode. Please note that your masternode will fail to start when "masternodeblsprivkey"
-is not specified. This also means that 0.13.2.0 will only work with masternodes which have already registered their
-DIP3 masternode. This enforcement was added to catch misconfigurations of masternodes which would otherwise stay
-unnoticed until spork 15 activation and thus surprise and hurt masternode owners.
+Fixed governance votes pruning for invalid masternodes 
+------------------------------------------------------
+A community member reported a possible attack that involves DoSing masternodes to force the network
+to prune all governance votes from this masternodes. This could be used to manipulate vote outcomes.
 
-Fix for consistency issues after sudden stopping of node
---------------------------------------------------------
-Previous versions resulted in inconsistency between the chainstate and evodb when the node crashed or otherwise suddenly
-stopped (e.g. power failure). This should be fixed in 0.13.2.0. 
-
-Fix for litemode nodes to not reject specific DIP3 transactions
----------------------------------------------------------------
-Previous versions might cause litemode nodes to reject the mainnet chain after spork 15 activation. This is due to a
-consensus rule being less strict in one specific case when spork 15 is active. Litemode nodes can not know about the
-change in consensus rules as they have no knowledge about sporks. In 0.13.2.0, when litemode is enabled, we default to the
-behaviour of activated spork15 in this specific case, which fixes the issue. The restriction will be completely removed
-in the next major release.
-
-Fix incorrect behavior for "protx diff" and the P2P message "GETMNLISTDIFF"
----------------------------------------------------------------------------
-Both were responding with errors when "0" was used as base block hash. DIP4 defines "0" to be equivalent with the
-genesis block, so that it's easy for peers to request the full masternode list.
-This is mostly important for SPV nodes (e.g. mobile wallets) which need the masternode list. Right now, all nodes in
-the network will respond with an error when "0" is provided in  "GETMNLISTDIFF". Until enough masternodes have upgraded
-to 0.13.2.0, SPV nodes should use the full genesis hash to circumvent the error.
-
-Exclusion of LLMQ quorum commitments from partial blocks
---------------------------------------------------------
-SPV nodes are generally not interested in non-financial special transactions in blocks, so we're omitting them now when
-sending partial/filtered blocks to SPV clients. This currently only filters LLMQ quorum commitments, which also caused
-some SPV implementations to ban nodes as they were not able to process these. DIP3 transactions (ProRegTx, ProUpRegTx, ...)
-are not affected and are still included in partial/filtered blocks as these might also move funds. 
-
-RPC changes
------------
-`masternode list json` and `protx list` will now include the collateral address of masternodes.
-
-Bug fixes/Other improvements
-----------------------------
-There are few bug fixes in this release:
-- Fixed a crash on shutdown
-- Fixed a misleading error message in the RPC "protx update_registrar"  
-- Slightly speed up initial sync by not running DIP3 logic in old blocks
-- Add build number (CLIENT_VERSION_BUILD) to MacOS bundle information 
-
- 0.13.2.0 Change log
-===================
-
+<<<<<<< HEAD
 See detailed [set of changes](https://github.com/biblepaypay/biblepay/compare/v0.13.1.0...biblepaypay:v0.13.2.0).
+=======
+This vulnerability is currently not possible to execute as LLMQ DKGs and PoSe have not activated yet on
+mainnet. This version includes a fix that requires to have at least 51% masternodes to upgrade to
+0.14.0.1, after which superblock trigger voting will automatically fix the discrepancies between
+old and new nodes. This also means that we will postpone activation of LLMQ DKGs and thus PoSe until
+at least 51% of masternodes have upgraded to 0.14.0.1.
+>>>>>>> 05adda99fe09f9f6d99ce09e22ed89be3ddfcd27
 
-### Backports
+Fixed a rare memory/db leak in LLMQ based InstantSend
+-----------------------------------------------------
+We fixed a rare memory/db leak in LLMQ based InstantSend leak which would only occur when reorganizations
+would happen.
 
+<<<<<<< HEAD
 - [`548a48918`](https://github.com/biblepaypay/biblepay/commit/548a48918) Move IS block filtering into ConnectBlock (#2766)
 - [`6374dce99`](https://github.com/biblepaypay/biblepay/commit/6374dce99) Fix error message for invalid voting addresses (#2747)
 - [`25222b378`](https://github.com/biblepaypay/biblepay/commit/25222b378) Make -masternodeblsprivkey mandatory when -masternode is given (#2745)
@@ -110,13 +84,23 @@ See detailed [set of changes](https://github.com/biblepaypay/biblepay/compare/v0
 - [`9e233f391`](https://github.com/biblepaypay/biblepay/commit/9e233f391) Fix incorrect usage of begin() when genesis block is requested in "protx diff" (#2699)
 - [`e75f971b9`](https://github.com/biblepaypay/biblepay/commit/e75f971b9) Do not process blocks in CDeterministicMNManager before dip3 activation (#2698)
 - [`1cc47ebcd`](https://github.com/biblepaypay/biblepay/commit/1cc47ebcd) Backport #14701: build: Add CLIENT_VERSION_BUILD to CFBundleGetInfoString (#2687)
+=======
+0.14.0.1 Change log
+===================
+>>>>>>> 05adda99fe09f9f6d99ce09e22ed89be3ddfcd27
 
-### Other
+See detailed [set of changes](https://github.com/dashpay/dash/compare/v0.14.0.0...dashpay:v0.14.0.1).
 
+<<<<<<< HEAD
 - [`2516a6e19`](https://github.com/biblepaypay/biblepay/commit/2516a6e19) Bump version to 0.13.2
 - [`9dd16cdbe`](https://github.com/biblepaypay/biblepay/commit/9dd16cdbe) Bump minChainWork and AssumeValid to block #1033120 (#2750)
 - [`18f087b27`](https://github.com/biblepaypay/biblepay/commit/18f087b27) Fix some typos in doc/guide-startmany.md (#2711)
 - [`709ab6d3e`](https://github.com/biblepaypay/biblepay/commit/709ab6d3e) Minimal fix for litemode vs bad-protx-key-not-same issue (#2694)
+=======
+- [`a2baa93ec`](https://github.com/dashpay/dash/commit/a2baa93ec) Only require valid collaterals for votes and triggers (#2947) (#2957)
+- [`b293e6dde`](https://github.com/dashpay/dash/commit/b293e6dde) Fix off-by-one error in InstantSend mining info removal when disconnecting blocks (#2951)
+- [`276b6e3a8`](https://github.com/dashpay/dash/commit/276b6e3a8) bump version to 0.14.0.1 and prepare release notes (#2952)
+>>>>>>> 05adda99fe09f9f6d99ce09e22ed89be3ddfcd27
 
 Credits
 =======
@@ -124,8 +108,7 @@ Credits
 Thanks to everyone who directly contributed to this release:
 
 - Alexander Block (codablock)
-- Felix Yan (felixonmars)
-- PastaPastaPasta
+- demodun6
 - UdjinM6
 
 As well as everyone that submitted issues and reviewed pull requests.
@@ -153,8 +136,11 @@ Dash Core tree 0.12.1.x was a fork of Bitcoin Core tree 0.12.
 
 These release are considered obsolete. Old release notes can be found here:
 
-- [v0.13.1.0](https://github.com/dashpay/dash/blob/master/doc/release-notes/dash/release-notes-0.13.1.0.md) released Feb/9/2019
-- [v0.13.0.0](https://github.com/dashpay/dash/blob/master/doc/release-notes/dash/release-notes-0.13.0.0.md) released Jan/14/2019
+- [v0.14.0](https://github.com/dashpay/dash/blob/master/doc/release-notes/dash/release-notes-0.14.0.md) released May/22/2019
+- [v0.13.3](https://github.com/dashpay/dash/blob/master/doc/release-notes/dash/release-notes-0.13.3.md) released Apr/04/2019
+- [v0.13.2](https://github.com/dashpay/dash/blob/master/doc/release-notes/dash/release-notes-0.13.2.md) released Mar/15/2019
+- [v0.13.1](https://github.com/dashpay/dash/blob/master/doc/release-notes/dash/release-notes-0.13.1.md) released Feb/9/2019
+- [v0.13.0](https://github.com/dashpay/dash/blob/master/doc/release-notes/dash/release-notes-0.13.0.md) released Jan/14/2019
 - [v0.12.3.4](https://github.com/dashpay/dash/blob/master/doc/release-notes/dash/release-notes-0.12.3.4.md) released Dec/14/2018
 - [v0.12.3.3](https://github.com/dashpay/dash/blob/master/doc/release-notes/dash/release-notes-0.12.3.3.md) released Sep/19/2018
 - [v0.12.3.2](https://github.com/dashpay/dash/blob/master/doc/release-notes/dash/release-notes-0.12.3.2.md) released Jul/09/2018

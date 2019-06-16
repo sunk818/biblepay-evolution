@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2015 The Bitcoin Core developers
-// Copyright (c) 2014-2017 The BiblePay Core developers
+// Copyright (c) 2014-2019 The BiblePay Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -20,6 +20,7 @@
 #include "httpserver.h"
 #include "httprpc.h"
 #include "utilstrencodings.h"
+#include "stacktraces.h"
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/filesystem.hpp>
@@ -203,6 +204,9 @@ bool AppInit(int argc, char* argv[])
 
 int main(int argc, char* argv[])
 {
+    RegisterPrettyTerminateHander();
+    RegisterPrettySignalHandlers();
+
     SetupEnvironment();
 
     // Connect biblepayd signal handlers
