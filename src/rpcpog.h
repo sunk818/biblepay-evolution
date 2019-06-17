@@ -9,6 +9,7 @@
 #include "hash.h"
 #include "net.h"
 #include "utilstrencodings.h"
+#include "validation.h"
 #include <univalue.h>
 
 class CWallet;

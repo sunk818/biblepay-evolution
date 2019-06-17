@@ -10,7 +10,6 @@
 #include "smartcontract-client.h"
 #include "init.h"
 #include "activemasternode.h"
-#include "masternodeman.h"
 #include "governance-classes.h"
 #include "governance.h"
 #include "masternode-sync.h"
@@ -306,20 +305,17 @@ bool VoteForGobject(uint256 govobj, std::string sVoteOutcome, std::string& sErro
     CGovernanceVote vote(mn.outpoint, govobj, eVoteSignal, eVoteOutcome);
 
     bool signSuccess = false;
-    if (deterministicMNManager->IsDeterministicMNsSporkActive()) {
-        if (govObjType == GOVERNANCE_OBJECT_PROPOSAL && eVoteSignal == VOTE_SIGNAL_FUNDING) 
-		{
-            sError = "Can't use vote-conf for proposals when deterministic masternodes are active";
-			return false;
-        }
-        if (activeMasternodeInfo.blsKeyOperator) 
-		{
-            signSuccess = vote.Sign(*activeMasternodeInfo.blsKeyOperator);
-        }
-    } else {
-        signSuccess = vote.Sign(activeMasternodeInfo.legacyKeyOperator, activeMasternodeInfo.legacyKeyIDOperator);
+    if (govObjType == GOVERNANCE_OBJECT_PROPOSAL && eVoteSignal == VOTE_SIGNAL_FUNDING)
+    {
+        sError = "Can't use vote-conf for proposals when deterministic masternodes are active";
+        return false;
     }
-    if (!signSuccess) 
+    if (activeMasternodeInfo.blsKeyOperator)
+    {
+        signSuccess = vote.Sign(*activeMasternodeInfo.blsKeyOperator);
+    }
+
+    if (!signSuccess)
 	{
         sError = "Failure to sign.";
 		return false;
@@ -743,12 +739,7 @@ bool SubmitGSCTrigger(std::string sHex, std::string& gobjecthash, std::string& s
 	{
         if (fMnFound) {
             govobj.SetMasternodeOutpoint(activeMasternodeInfo.outpoint);
-            if (deterministicMNManager->IsDeterministicMNsSporkActive()) 
-			{
-                govobj.Sign(*activeMasternodeInfo.blsKeyOperator);
-            } else {
-                govobj.Sign(activeMasternodeInfo.legacyKeyOperator, activeMasternodeInfo.legacyKeyIDOperator);
-            }
+            govobj.Sign(*activeMasternodeInfo.blsKeyOperator);
         } else 
 		{
             sError = "Object submission rejected because node is not a Sanctuary\n";

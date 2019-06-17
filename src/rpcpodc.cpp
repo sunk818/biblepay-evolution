@@ -7,7 +7,6 @@
 #include "masternode-payments.h"
 #include "masternodeconfig.h"
 #include "activemasternode.h"
-#include "masternodeman.h"
 #include "governance-classes.h"
 #include "masternode-sync.h"
 #include "smartcontract-server.h"
