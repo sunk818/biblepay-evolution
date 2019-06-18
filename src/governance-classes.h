@@ -144,6 +144,9 @@ public:
     CSuperblock(uint256& nHash);
 
     static bool IsValidBlockHeight(int nBlockHeight);
+	static bool IsDCCSuperblock(int nHeight);	
+	static bool IsSmartContract(int nHeight);
+
     static void GetNearestSuperblocksHeights(int nBlockHeight, int& nLastSuperblockRet, int& nNextSuperblockRet);
     static CAmount GetPaymentsLimit(int nBlockHeight);
 

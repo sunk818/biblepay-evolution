@@ -7,7 +7,7 @@
 #include "init.h"
 #include "utilstrencodings.h"
 #include "validation.h"
-
+#include "smartcontract-server.h"
 #include <boost/algorithm/string.hpp>
 
 #include <univalue.h>
@@ -260,6 +260,16 @@ bool CSuperblockManager::IsSuperblockTriggered(int nBlockHeight)
 
         pObj->UpdateSentinelVariables();
 
+		// BiblePay - Extra Smart Contract Debug Info
+		if (CSuperblock::IsSmartContract(nBlockHeight))	        
+		{
+			int iVotes = pObj->GetAbsoluteYesCount(VOTE_SIGNAL_FUNDING);	
+			int iRequiredVotes = GetRequiredQuorumLevel(nBlockHeight);	
+			bool bPassed = iVotes >= iRequiredVotes;	
+			LogPrintf("\nCSuperblockManager::IsGSCSuperblockTriggered - Height %f, Votes %f, Required Votes %f, Status %f",	
+					(double)nBlockHeight, (double)iVotes, (double)iRequiredVotes, (double)bPassed);
+		}
+
         if (pObj->IsSetCachedFunding()) {
             LogPrint("gobject", "CSuperblockManager::IsSuperblockTriggered -- fCacheFunding = true, returning true\n");
             return true;
@@ -268,14 +278,36 @@ bool CSuperblockManager::IsSuperblockTriggered(int nBlockHeight)
         }
     }
 
-    return false;
+	if (CSuperblock::IsSmartContract(nBlockHeight)) 	
+		LogPrintf("IsSuperblockTriggered::SmartContract -- WARNING: No GSC superblock triggered at this height %f. ", nBlockHeight);
+    
+	return false;
 }
 
+std::string GetQTPhaseXML(uint256 gObj)	
+{	
+	CGovernanceObject *myGov = governance.FindGovernanceObject(gObj);	
+	if (myGov)	
+	{	
+		UniValue obj = myGov->GetJSONObject();	
+		if (obj.size() > 0)	
+		{	
+			std::string sPrice = obj["price"].getValStr();	
+			std::string sQTPhase = obj["qtphase"].getValStr();	
+			std::string sBTC = obj["btcprice"].getValStr();	
+			// This is just for informational purposes when auditing txoutinfo	
+			std::string sXML = "<price>" + sPrice + "</price><qtphase>" + sQTPhase + "</qtphase><btcprice>" + sBTC + "</btcprice>";	
+			return sXML;	
+		}	
+	}	
+	return "<price>-0.00</price><qtphase>-0.00</qtphase><btcprice>-0</btcprice>";	
+}
 
 bool CSuperblockManager::GetBestSuperblock(CSuperblock_sptr& pSuperblockRet, int nBlockHeight)
 {
-    if (!CSuperblock::IsValidBlockHeight(nBlockHeight)) {
-        return false;
+    if (!CSuperblock::IsValidBlockHeight(nBlockHeight) && !CSuperblock::IsSmartContract(nBlockHeight)) 
+	{
+	    return false;
     }
 
     AssertLockHeld(governance.cs);
@@ -334,12 +366,21 @@ bool CSuperblockManager::GetSuperblockPayments(int nBlockHeight, std::vector<CTx
     //       Consider at least following limits:
     //          - max coinbase tx size
     //          - max "budget" available
+	bool bQTPhaseEmitted = false;
+
     for (int i = 0; i < pSuperblock->CountPayments(); i++) {
         CGovernancePayment payment;
         if (pSuperblock->GetPayment(i, payment)) {
             // SET COINBASE OUTPUT TO SUPERBLOCK SETTING
 
             CTxOut txout = CTxOut(payment.nAmount, payment.script);
+			// BiblePay - QT	
+			if (!bQTPhaseEmitted) 	
+			{	
+				txout.sTxOutMessage = GetQTPhaseXML(pSuperblock->GetGovernanceObject()->GetHash());	
+				bQTPhaseEmitted = true;	
+			}
+
             voutSuperblockRet.push_back(txout);
 
             // PRINT NICE LOG OUTPUT FOR SUPERBLOCK PAYMENT
@@ -460,22 +501,126 @@ void CSuperblock::GetNearestSuperblocksHeights(int nBlockHeight, int& nLastSuper
     }
 }
 
+bool CSuperblock::IsSmartContract(int nHeight)	
+{	
+    const Consensus::Params& consensusParams = Params().GetConsensus();	
+	if (nHeight > consensusParams.FPOG_CUTOVER_HEIGHT)	
+	{	
+		return nHeight >= Params().GetConsensus().nDCCSuperblockStartBlock && ((nHeight % Params().GetConsensus().nDCCSuperblockCycle) == 20);	
+	}	
+	else	
+	{	
+		return false;	
+	}	
+}	
+
+bool CSuperblock::IsDCCSuperblock(int nHeight)	
+{	
+    const Consensus::Params& consensusParams = Params().GetConsensus();	
+	if (nHeight > consensusParams.PODC_LAST_BLOCK) return false;	
+	if (nHeight > consensusParams.F13000_CUTOVER_HEIGHT)	
+	{	
+		return nHeight >= Params().GetConsensus().nDCCSuperblockStartBlock &&	
+            ((nHeight % Params().GetConsensus().nDCCSuperblockCycle) == 10);	
+	}	
+	else	
+	{	
+		return nHeight >= Params().GetConsensus().nDCCSuperblockStartBlock &&	
+            ((nHeight % Params().GetConsensus().nDCCSuperblockCycle) == 0);	
+	}	
+}
+
+int Get24HourAvgBits(const CBlockIndex* pindexSource, int nPrevBits)	
+{	
+	const CBlockIndex *pindexLast = pindexSource;	
+	if (pindexLast == NULL || pindexLast->nHeight == 0)  return nPrevBits;	
+	int nLookback = BLOCKS_PER_DAY;	
+	double nTotal = 0;	
+	double nSamples = 0;	
+	for (int i = 1; i <= nLookback; i++) 	
+	{	
+		if (pindexLast->pprev == NULL) { break; }	
+		nTotal += pindexLast->nBits;	
+		nSamples++;	
+		pindexLast = pindexLast->pprev;	
+	}	
+	if (nSamples < 1) return nPrevBits;	
+	double nAvg = nTotal / nSamples;	
+	return (int)nAvg;	
+}
+
 CAmount CSuperblock::GetPaymentsLimit(int nBlockHeight)
 {
     const Consensus::Params& consensusParams = Params().GetConsensus();
-
-    if (!IsValidBlockHeight(nBlockHeight)) {
-        return 0;
+	if (!IsValidBlockHeight(nBlockHeight) && !IsDCCSuperblock(nBlockHeight) && !IsSmartContract(nBlockHeight))
+	{
+		return 0;
     }
+	// Use this difficulty only for Monthly governance (which accounts for 20% of emissions, but use trailing 24 hour diff for smart contracts)	
+ 	int nBits = 486585255;
+		
+    // Some part of all blocks issued during the cycle goes to superblock, see GetBlockSubsidy
+	// We have 48.50% escrow being held back from each block, 28.5% is for the daily generic smart contract superblock, 20% for the monthly governance budget; split into 65% for Daily rewards and 35% for monthly rewards.
+	
+	int nSuperblockCycle = 0;
+	double nBudgetFactor = 0;
+	int nType = 0;
+	
+	if (IsValidBlockHeight(nBlockHeight))	
+	{	
+		// Active - Monthly	
+		nSuperblockCycle = consensusParams.nSuperblockCycle;	
+		double nAdjFactor = .05;  // This brings our budget down to the actual seamless budget deflation level as of March 2019 while accounting for all prior budgets	
+		nBudgetFactor = .35 - nAdjFactor;	
+		nType = 0;	
+	}	
+	else if (IsDCCSuperblock(nBlockHeight))	
+	{	
+		// RETIRED - Daily	
+		nSuperblockCycle = consensusParams.nDCCSuperblockCycle;	
+ 		nBudgetFactor = .65;	
+		nType = 1;	
+		if (fProd && nBlockHeight > 33600 && nBlockHeight < consensusParams.PODC_LAST_BLOCK) nBudgetFactor = 1.0; // Early DC Superblocks paid the entire budget.	
+	}	
+	else if (IsSmartContract(nBlockHeight))	
+	{	
+		// Active - Daily	
+		nSuperblockCycle = consensusParams.nDCCSuperblockCycle;	
+ 		nBudgetFactor = .65;	
+		nType = 2;	
+		// LogPrintf(" AssessmentHeight %f, BlockHeight %f, 24HrAvgBits %f \n", (double)nAssessmentHeight, (double)nBlockHeight, (double)nBits);	
+	}	
+	else	
+	{	
+		return 0;	
+	}	
 
-    // min subsidy for high diff networks and vice versa
-    int nBits = consensusParams.fPowAllowMinDifficultyBlocks ? UintToArith256(consensusParams.powLimit).GetCompact() : 1;
-    // some part of all blocks issued during the cycle goes to superblock, see GetBlockSubsidy
-    CAmount nSuperblockPartOfSubsidy = GetBlockSubsidy(nBits, nBlockHeight - 1, consensusParams, true);
-    CAmount nPaymentsLimit = nSuperblockPartOfSubsidy * consensusParams.nSuperblockCycle;
-    LogPrint("gobject", "CSuperblock::GetPaymentsLimit -- Valid superblock height %d, payments max %lld\n", nBlockHeight, nPaymentsLimit);
+ 	// Note at block 98400, our budget is 13518421, deflating.	
+	// The first call to GetBlockSubsidy calculates the future reward (and this has our standard deflation of 19% per year in it)	
+	CAmount nMaxMonthlyBudget = 13500000 * COIN;	
+	CAmount nMaxDailyBudget   = 1000000  * COIN;	
+	//QT - Get reference block subsidy from last months subsidy	
+	int nAssessmentHeight = nBlockHeight - 1;	
+	if (nBlockHeight > consensusParams.QTHeight)	
+		nAssessmentHeight -= (BLOCKS_PER_DAY * 32);	
+    CAmount nSuperblockPartOfSubsidy = GetBlockSubsidy(nBits, nAssessmentHeight, consensusParams, true);	
+    CAmount nPaymentsLimit = nSuperblockPartOfSubsidy * nSuperblockCycle * nBudgetFactor;	
+	CAmount nAbsoluteMaxMonthlyBudget = MAX_BLOCK_SUBSIDY * BLOCKS_PER_DAY * 30 * .20 * COIN; // Ensure monthly budget is never > 20% of avg monthly total block emission regardless of low difficulty in PODC	
+	if (nPaymentsLimit > nAbsoluteMaxMonthlyBudget) nPaymentsLimit = nAbsoluteMaxMonthlyBudget;	
+	if (Params().NetworkIDString() == "main")	
+	{	
+		if (nType == 0 && nBlockHeight > (consensusParams.EVOLUTION_CUTOVER_HEIGHT - 6150) && nPaymentsLimit > nMaxMonthlyBudget)	
+		{	
+			nPaymentsLimit = nMaxMonthlyBudget;	
+		}	
+		else if (nType == 2 && nBlockHeight > consensusParams.EVOLUTION_CUTOVER_HEIGHT && nPaymentsLimit > nMaxDailyBudget)	
+		{	
+			nPaymentsLimit = nMaxDailyBudget;	
+		}	
+	}	
 
-    return nPaymentsLimit;
+     LogPrint("net", "CSuperblock::GetPaymentsLimit -- Valid superblock height %d, payments max %d \n", (double)nBlockHeight, (double)nPaymentsLimit/COIN);	
+	 return nPaymentsLimit;
 }
 
 void CSuperblock::ParsePaymentSchedule(const std::string& strPaymentAddresses, const std::string& strPaymentAmounts)
@@ -513,7 +658,7 @@ void CSuperblock::ParsePaymentSchedule(const std::string& strPaymentAddresses, c
         CBitcoinAddress address(vecParsed1[i]);
         if (!address.IsValid()) {
             std::ostringstream ostr;
-            ostr << "CSuperblock::ParsePaymentSchedule -- Invalid Dash Address : " << vecParsed1[i];
+            ostr << "CSuperblock::ParsePaymentSchedule -- Invalid Biblepay Address : " << vecParsed1[i];
             LogPrintf("%s\n", ostr.str());
             throw std::runtime_error(ostr.str());
         }
@@ -583,8 +728,9 @@ bool CSuperblock::IsValid(const CTransaction& txNew, int nBlockHeight, CAmount b
     // internal to *this and since CSuperblock's are accessed only through
     // shared pointers there's no way our object can get deleted while this
     // code is running.
-    if (!IsValidBlockHeight(nBlockHeight)) {
-        LogPrintf("CSuperblock::IsValid -- ERROR: Block invalid, incorrect block height\n");
+    if (!IsValidBlockHeight(nBlockHeight) && !IsSmartContract(nBlockHeight)) 
+	{
+		LogPrintf("CSuperblock::IsValid -- ERROR: Block invalid, incorrect block height\n");
         return false;
     }
 

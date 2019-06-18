@@ -1187,7 +1187,7 @@ UniValue createnonfinancialtransaction(const JSONRPCRequest& request)
 	CTxDestination feeSource;
 	feeSource = baPayAddress.Get();
 	// Fund the non financial tx
-	FundSpecialTx(tx, ptx, feeSource);
+	FundSpecialTx(pwalletMain, tx, ptx, feeSource);
 	// sign the non financial with the CPK
 	CKeyID keyID;
 	if (!baPayAddress.GetKeyID(keyID))
@@ -1219,7 +1219,7 @@ UniValue sponsorchild(const JSONRPCRequest& request)
 		throw std::runtime_error("Sponsorship cancelled.");
 	std::string sError;
 	std::string sProject = "cpk|cameroon-one";
-    EnsureWalletIsUnlocked();
+    EnsureWalletIsUnlocked(pwalletMain);
 
 	CAmount nFee = 500 * COIN;
 	std::string sChildId = GetRandHash().GetHex().substr(0,8);

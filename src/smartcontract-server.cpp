@@ -14,7 +14,7 @@
 #include "governance.h"
 #include "masternode-sync.h"
 #include "masternode-payments.h"
-#include "masternodeconfig.h"
+//#include "masternodeconfig.h"
 #include "messagesigner.h"
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string/case_conv.hpp> // for to_lower()
@@ -62,7 +62,7 @@ std::string GetTxCPK(CTransactionRef tx, std::string& sCampaignName)
 
 BiblePayProposal GetProposalByHash(uint256 govObj, int nLastSuperblock)
 {
-	int nSancCount = mnodeman.CountEnabled();
+	int nSancCount = deterministicMNManager->GetListAtChainTip().GetValidMNsCount();
 	int nMinPassing = nSancCount * .10;
 	if (nMinPassing < 1) nMinPassing = 1;
 	CGovernanceObject* myGov = governance.FindGovernanceObject(govObj);
@@ -115,7 +115,8 @@ std::string WatchmanOnTheWall(bool fForce, std::string& sContract)
 	int nNextSuperblock = 0;
 	GetGovSuperblockHeights(nNextSuperblock, nLastSuperblock);
 
-	int nSancCount = mnodeman.CountEnabled();
+	int nSancCount = deterministicMNManager->GetListAtChainTip().GetValidMNsCount();
+
 	std::string sReport;
 
 	int nBlocksUntilEpoch = nNextSuperblock - chainActive.Tip()->nHeight;
@@ -292,17 +293,16 @@ bool VoteForGobject(uint256 govobj, std::string sVoteOutcome, std::string& sErro
         }
         govObjType = pGovObj->GetObjectType();
     }
+	
+    auto dmn = deterministicMNManager->GetListAtChainTip().GetValidMNByCollateral(activeMasternodeInfo.outpoint);
 
-    CMasternode mn;
-    bool fMnFound = mnodeman.Get(activeMasternodeInfo.outpoint, mn);
-
-    if (!fMnFound) 
+    if (!dmn) 
 	{
         sError = "Can't find masternode by collateral output";
 		return false;
     }
 
-    CGovernanceVote vote(mn.outpoint, govobj, eVoteSignal, eVoteOutcome);
+    CGovernanceVote vote(dmn->collateralOutpoint, govobj, eVoteSignal, eVoteOutcome);
 
     bool signSuccess = false;
     if (govObjType == GOVERNANCE_OBJECT_PROPOSAL && eVoteSignal == VOTE_SIGNAL_FUNDING)
@@ -575,7 +575,7 @@ int GetRequiredQuorumLevel(int nHeight)
 {
 	static int MINIMUM_QUORUM_PROD = 10;
 	static int MINIMUM_QUORUM_TESTNET = 3;
-	int nCount = mnodeman.CountEnabled();
+	int nCount = deterministicMNManager->GetListAtChainTip().GetValidMNsCount();
 	int nReq = nCount * .20;
 	int nMinimumQuorum = fProd ? MINIMUM_QUORUM_PROD : MINIMUM_QUORUM_TESTNET;
 	if (nReq < nMinimumQuorum) nReq = nMinimumQuorum;
@@ -714,11 +714,8 @@ bool SubmitGSCTrigger(std::string sHex, std::string& gobjecthash, std::string& s
 		return false;
 	}
 
-	bool fMnFound = mnodeman.Has(activeMasternodeInfo.outpoint);
-	DBG( std::cout << "gobject: submit activeSancInfo.keyIDOperator = " << activeMasternodeInfo.legacyKeyIDOperator.ToString()
-         << ", outpoint = " << activeMasternodeInfo.outpoint.ToStringShort()
-         << ", params.size() = " << request.params.size()
-         << ", fMnFound = " << fMnFound << std::endl; );
+	auto dmn = deterministicMNManager->GetListAtChainTip().GetValidMNByCollateral(activeMasternodeInfo.outpoint);
+
 	uint256 txidFee;
 	uint256 hashParent = uint256();
 	int nRevision = 1;
@@ -727,7 +724,8 @@ bool SubmitGSCTrigger(std::string sHex, std::string& gobjecthash, std::string& s
 	int64_t nLastGSCSubmitted = 0;
 	CGovernanceObject govobj(hashParent, nRevision, nTime, txidFee, strData);
 
-	if (fDebug) LogPrintf("\nSubmitting GSC Trigger %s ", govobj.GetDataAsPlainString());
+	if (fDebug)
+		LogPrintf("\nSubmitting GSC Trigger %s ", govobj.GetDataAsPlainString());
 
     DBG( std::cout << "gobject: submit "
          << " GetDataAsPlainString = " << govobj.GetDataAsPlainString()
@@ -737,10 +735,12 @@ bool SubmitGSCTrigger(std::string sHex, std::string& gobjecthash, std::string& s
 
 	if (govobj.GetObjectType() == GOVERNANCE_OBJECT_TRIGGER) 
 	{
-        if (fMnFound) {
+        if (!dmn) 
+		{
             govobj.SetMasternodeOutpoint(activeMasternodeInfo.outpoint);
             govobj.Sign(*activeMasternodeInfo.blsKeyOperator);
-        } else 
+        }
+		else 
 		{
             sError = "Object submission rejected because node is not a Sanctuary\n";
 			return false;

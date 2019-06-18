@@ -22,6 +22,7 @@
 #include "masternode-sync.h"
 #include "privatesend-client.h"
 #include <boost/lexical_cast.hpp>
+#include "validation.h"
 
 #include <QAbstractItemDelegate>
 #include <QPainter>

@@ -26,7 +26,6 @@ Drag Biblepay-Qt to your applications folder, and then run Biblepay-Qt.
 
 * See the [Biblepay documentation](https://docs.biblepay.org)
 for help and more information.
-<<<<<<< HEAD
 * Ask for help on [Biblepay Nation Discord](http://biblepaychat.org)
 * Ask for help on the [Biblepay Forum](https://biblepay.org/forum)
 =======
@@ -34,7 +33,6 @@ for help and more information.
 for technical specifications and implementation details.
 * Ask for help on [Dash Nation Discord](http://dashchat.org)
 * Ask for help on the [Dash Forum](https://dash.org/forum)
->>>>>>> 05adda99fe09f9f6d99ce09e22ed89be3ddfcd27
 
 Building
 ---------------------

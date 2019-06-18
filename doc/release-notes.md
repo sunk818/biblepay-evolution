@@ -20,7 +20,6 @@ How to Upgrade
 
 If you are running an older version, shut it down. Wait until it has completely
 shut down (which might take a few minutes for older versions), then run the
-<<<<<<< HEAD
 installer (on Windows) or just copy over /Applications/biblepay-Qt (on Mac) or
 biblepayd/biblepay-qt (on Linux). If you upgrade after DIP0003 activation you will
 have to reindex (start with -reindex-chainstate or -reindex) to make sure
@@ -35,7 +34,6 @@ dashd/dash-qt (on Linux). If you upgrade after DIP0003 activation and you were
 using version < 0.13 you will have to reindex (start with -reindex-chainstate
 or -reindex) to make sure your wallet has all the new data synced. Upgrading from
 version 0.13 should not require any additional actions.
->>>>>>> 05adda99fe09f9f6d99ce09e22ed89be3ddfcd27
 
 Downgrade warning
 -----------------
@@ -58,7 +56,6 @@ Fixed governance votes pruning for invalid masternodes
 A community member reported a possible attack that involves DoSing masternodes to force the network
 to prune all governance votes from this masternodes. This could be used to manipulate vote outcomes.
 
-<<<<<<< HEAD
 See detailed [set of changes](https://github.com/biblepaypay/biblepay/compare/v0.13.1.0...biblepaypay:v0.13.2.0).
 =======
 This vulnerability is currently not possible to execute as LLMQ DKGs and PoSe have not activated yet on
@@ -66,14 +63,12 @@ mainnet. This version includes a fix that requires to have at least 51% masterno
 0.14.0.1, after which superblock trigger voting will automatically fix the discrepancies between
 old and new nodes. This also means that we will postpone activation of LLMQ DKGs and thus PoSe until
 at least 51% of masternodes have upgraded to 0.14.0.1.
->>>>>>> 05adda99fe09f9f6d99ce09e22ed89be3ddfcd27
 
 Fixed a rare memory/db leak in LLMQ based InstantSend
 -----------------------------------------------------
 We fixed a rare memory/db leak in LLMQ based InstantSend leak which would only occur when reorganizations
 would happen.
 
-<<<<<<< HEAD
 - [`548a48918`](https://github.com/biblepaypay/biblepay/commit/548a48918) Move IS block filtering into ConnectBlock (#2766)
 - [`6374dce99`](https://github.com/biblepaypay/biblepay/commit/6374dce99) Fix error message for invalid voting addresses (#2747)
 - [`25222b378`](https://github.com/biblepaypay/biblepay/commit/25222b378) Make -masternodeblsprivkey mandatory when -masternode is given (#2745)
@@ -87,11 +82,9 @@ would happen.
 =======
 0.14.0.1 Change log
 ===================
->>>>>>> 05adda99fe09f9f6d99ce09e22ed89be3ddfcd27
 
 See detailed [set of changes](https://github.com/dashpay/dash/compare/v0.14.0.0...dashpay:v0.14.0.1).
 
-<<<<<<< HEAD
 - [`2516a6e19`](https://github.com/biblepaypay/biblepay/commit/2516a6e19) Bump version to 0.13.2
 - [`9dd16cdbe`](https://github.com/biblepaypay/biblepay/commit/9dd16cdbe) Bump minChainWork and AssumeValid to block #1033120 (#2750)
 - [`18f087b27`](https://github.com/biblepaypay/biblepay/commit/18f087b27) Fix some typos in doc/guide-startmany.md (#2711)
@@ -100,7 +93,6 @@ See detailed [set of changes](https://github.com/dashpay/dash/compare/v0.14.0.0.
 - [`a2baa93ec`](https://github.com/dashpay/dash/commit/a2baa93ec) Only require valid collaterals for votes and triggers (#2947) (#2957)
 - [`b293e6dde`](https://github.com/dashpay/dash/commit/b293e6dde) Fix off-by-one error in InstantSend mining info removal when disconnecting blocks (#2951)
 - [`276b6e3a8`](https://github.com/dashpay/dash/commit/276b6e3a8) bump version to 0.14.0.1 and prepare release notes (#2952)
->>>>>>> 05adda99fe09f9f6d99ce09e22ed89be3ddfcd27
 
 Credits
 =======

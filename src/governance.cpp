@@ -427,7 +427,7 @@ void CGovernanceManager::UpdateCachesAndClean()
             (nTimeSinceDeletion >= GOVERNANCE_DELETION_DELAY)) {
             if (fDebugSpam)
 				LogPrintf("CGovernanceManager::UpdateCachesAndClean -- erase obj %s\n", (*it).first.ToString());
-            mnodeman.RemoveGovernanceObject(pObj->GetHash());
+            mmetaman.RemoveGovernanceObject(pObj->GetHash());
 
             // Remove vote references
             const object_ref_cm_t::list_t& listItems = cmapVoteToObject.GetItemList();
@@ -738,10 +738,10 @@ void CGovernanceManager::SyncObjects(CNode* pnode, CConnman& connman) const
         ++nObjCount;
     }
 
-    CNetMsgMaker msgMaker(pnode->GetSendVersion());
+	CNetMsgMaker msgMaker(pnode->GetSendVersion());
     connman.PushMessage(pnode, msgMaker.Make(NetMsgType::SYNCSTATUSCOUNT, MASTERNODE_SYNC_GOVOBJ, nObjCount));
-    if (fDebugSpam)
-		LogPrintf("CGovernanceManager::%s -- sent %d objects and %d votes to peer=%d\n", __func__, nObjCount, nVoteCount, pnode->id);
+	if (fDebugSpam)
+		    LogPrintf("CGovernanceManager::%s -- sent %d objects to peer=%d\n", __func__, nObjCount, pnode->id);
 }
 
 void CGovernanceManager::MasternodeRateUpdate(const CGovernanceObject& govobj)

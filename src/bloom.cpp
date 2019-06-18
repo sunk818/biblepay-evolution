@@ -221,6 +221,13 @@ bool CBloomFilter::CheckSpecialTransactionMatchesAndUpdate(const CTransaction &t
         }
         return false;
     }
+	case(TRANSACTION_NON_FINANCIAL): {
+        CNonFinancialTx nonfinTx;
+        if (GetTxPayload(tx, nonfinTx)) {
+                return true;
+        }
+        return false;
+	}
     case(TRANSACTION_COINBASE):
     case(TRANSACTION_QUORUM_COMMITMENT):
         // No aditional checks for this transaction types

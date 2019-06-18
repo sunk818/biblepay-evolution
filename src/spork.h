@@ -34,10 +34,10 @@ static const int SPORK_19_CHAINLOCKS_ENABLED                            = 10018;
 static const int SPORK_20_INSTANTSEND_LLMQ_BASED                        = 10019;
 
 // BIBLEPAY - Start at 10090 to leave room for future Dash Sporks
-static const int SPORK_20_QUANTITATIVE_TIGHTENING_ENABLED               = 10090;
+static const int SPORK_30_QUANTITATIVE_TIGHTENING_ENABLED               = 10090;
 
 static const int SPORK_START                                            = SPORK_2_INSTANTSEND_ENABLED;
-static const int SPORK_END                                              = SPORK_20_INSTANTSEND_LLMQ_BASED;
+static const int SPORK_END                                              = SPORK_30_QUANTITATIVE_TIGHTENING_ENABLED;
 
 extern std::map<int, int64_t> mapSporkDefaults;
 extern CSporkManager sporkManager;

@@ -213,7 +213,7 @@ double GetQTPhase(bool fInFuture, double dPrice, int nEventHeight, double& out_P
 	// If a -1 dPrice is passed in, the caller wants the prior days QT level and price.
     double nMaximumTighteningPercentage = GetSporkDouble("qtmaxpercentage", 0);
 	double nQTStartHeight = GetSporkDouble("qtheight", 0);
-	bool fEnabled = sporkManager.IsSporkActive(SPORK_20_QUANTITATIVE_TIGHTENING_ENABLED) && nQTStartHeight > 0 && nEventHeight > nQTStartHeight;
+	bool fEnabled = sporkManager.IsSporkActive(SPORK_30_QUANTITATIVE_TIGHTENING_ENABLED) && nQTStartHeight > 0 && nEventHeight > nQTStartHeight;
 	if (nMaximumTighteningPercentage == 0 || !fEnabled)
 		return 0;
 	double nPriceThreshhold = GetSporkDouble("qtpricethreshhold", 0);

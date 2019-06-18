@@ -559,18 +559,7 @@ std::string HelpMessageOpt(const std::string &option, const std::string &message
 
 static std::string FormatException(const std::exception_ptr pex, const char* pszThread)
 {
-#ifdef WIN32
-    char pszModule[MAX_PATH] = "";
-    GetModuleFileNameA(NULL, pszModule, sizeof(pszModule));
-#else
-    const char* pszModule = "biblepay";
-#endif
-    if (pex)
-        return strprintf(
-            "EXCEPTION: %s       \n%s       \n%s in %s       \n", typeid(*pex).name(), pex->what(), pszModule, pszThread);
-    else
-        return strprintf(
-            "UNKNOWN EXCEPTION       \n%s in %s       \n", pszModule, pszThread);
+    return strprintf("EXCEPTION: %s", GetPrettyExceptionStr(pex));
 }
 
 void PrintExceptionContinue(const std::exception_ptr pex, const char* pszThread)
@@ -649,6 +638,14 @@ boost::filesystem::path GetBackupsDir()
         return GetDataDir() / "backups";
 
     return fs::absolute(GetArg("-walletbackupsdir", ""));
+}
+
+boost::filesystem::path GetMasternodeConfigFile()
+{
+    boost::filesystem::path pathConfigFile(GetArg("-mnconf", "masternode.conf"));
+    if (!pathConfigFile.is_complete())
+        pathConfigFile = GetDataDir() / pathConfigFile;
+    return pathConfigFile;
 }
 
 void ClearDatadirCache()

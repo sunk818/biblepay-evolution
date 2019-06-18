@@ -28,6 +28,7 @@
 #include "txmempool.h"
 #include "util.h"
 #include "utilmoneystr.h"
+#include "governance-classes.h"
 #include "masternode-payments.h"
 #include "masternode-sync.h"
 #include "validationinterface.h"
@@ -207,9 +208,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
 			LogPrintf("\nCreateNewBlock::Unable to add ABN because %s", sError1.c_str());
 		}
 	}
-
-    addPriorityTxs();
-
+	
     int nPackagesSelected = 0;
     int nDescendantsUpdated = 0;
     addPackageTxs(nPackagesSelected, nDescendantsUpdated);
