@@ -1559,13 +1559,13 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         }
         // Disconnect if we connected to ourself
 
-	    if ((nVersion < nMinPeerProtoVersion) || (!fProd && nVersion < MIN_PEER_TESTNET_PROTO_VERSION))	       
+	    if ((nVersion < MIN_PEER_PROTO_VERSION_DIP3) || (!fProd && nVersion < MIN_PEER_TESTNET_PROTO_VERSION))
         {
 			// disconnect from peers older than this proto version	            vRecv >> pfrom->receivedMNAuthChallenge;
 			if (fDebugSpam)	
 				LogPrintf("peer=%d using obsolete version %i; disconnecting\n", pfrom->id, nVersion);	
             connman.PushMessage(pfrom, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::REJECT, strCommand, REJECT_OBSOLETE,	
-                               strprintf("Version must be %d or greater", nMinPeerProtoVersion)));	
+                               strprintf("Version must be %d or greater", MIN_PEER_PROTO_VERSION_DIP3)));	
             pfrom->fDisconnect = true;	
             return false;	
         }	

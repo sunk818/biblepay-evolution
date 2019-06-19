@@ -697,9 +697,6 @@ bool GetPoolMiningMode(int iThreadID, int& iFailCount, std::string& out_PoolAddr
 	// Honor TestNet and RegTestNet when communicating with pools, so we support all three NetworkID types for robust support/testing.
 
 	std::string sPoolURL = GetArg("-pool", "");
-	out_MinerGuid;
-	out_WorkID;
-	out_PoolAddress;
 
 	// If pool URL is empty, user is not pool mining
 	if (sPoolURL.empty())
