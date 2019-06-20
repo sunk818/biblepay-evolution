@@ -2146,7 +2146,7 @@ UniValue exec(const JSONRPCRequest& request)
 			std::string sDiary = ExtractXML(tx->GetTxMessage(), "<diary>", "</diary>");
 			std::string sCampaignName;
 			std::string sCPK = GetTxCPK(tx, sCampaignName);
-			double nPoints = CalculatePoints(sCampaignName, sDiary, nCoinAge, nDonation);
+			double nPoints = CalculatePoints(sCampaignName, sDiary, nCoinAge, nDonation, sCPK);
 			results.push_back(Pair("pog_points", nPoints));
 			results.push_back(Pair("coin_age", nCoinAge));
 			results.push_back(Pair("diary_entry", sDiary));
@@ -2718,6 +2718,14 @@ UniValue exec(const JSONRPCRequest& request)
 			double nROIBalance = (nEarned / (nTotalReq/COIN)) * 100 * 365;
 			results.push_back(Pair("Balance " + RoundToString(nTotalReq / COIN, 2) + " Annualized ROI %", nROIBalance));
 		}
+	}
+	else if (sItem == "getchildbalance")
+	{
+		if (request.params.size() != 2)
+			throw std::runtime_error("You must specify the childID.");
+		std::string sChildID = request.params[1].get_str();
+		double dBal = GetCameroonChildBalance(sChildID);
+		results.push_back(Pair("childid", dBal));
 	}
 	else if (sItem == "datalist")
 	{

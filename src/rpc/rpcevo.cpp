@@ -1243,7 +1243,7 @@ UniValue sponsorchild(const JSONRPCRequest& request)
 			"\nBoston, MA 02119 USA"
 			"\n!NOTE! You must write Child ID #" + sChildId + " on your check."
 			"\nPayPal:"
-			"\n";
+			"\nGlobalGiving Match:";
 		std::vector<std::string> vNarr = Split(sNarr.c_str(), "\n");
 		for (int i = 0; i < vNarr.size(); i++)
 		{

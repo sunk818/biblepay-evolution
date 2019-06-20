@@ -33,6 +33,7 @@ void GetGovObjDataByPamHash(int nHeight, uint256 hPamHash, std::string& out_Data
 BiblePayProposal GetProposalByHash(uint256 govObj, int nLastSuperblock);
 std::string DescribeProposal(BiblePayProposal bbpProposal);
 std::string GetTxCPK(CTransactionRef tx, std::string& sCampaignName);
-double CalculatePoints(std::string sCampaign, std::string sDiary, double nCoinAge, CAmount nDonation);
+double CalculatePoints(std::string sCampaign, std::string sDiary, double nCoinAge, CAmount nDonation, std::string sCPK);
+double GetCameroonChildBalance(std::string sChildID);
 
 #endif

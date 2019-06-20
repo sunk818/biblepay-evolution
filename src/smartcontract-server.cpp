@@ -56,6 +56,107 @@ std::string GetTxCPK(CTransactionRef tx, std::string& sCampaignName)
 	sCampaignName = ExtractXML(sMsg, "<gsccampaign>", "</gsccampaign>");
 	return sCPK;
 }
+
+//////////////////////////////////////////////////////////////////////////////// Cameroon-One /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+double GetBBPPrice()
+{
+	static int64_t nLastPriceCheck = 0;
+	int64_t nElapsed = GetAdjustedTime() - nLastPriceCheck;
+	static double nLastPrice = 0;
+	if (nElapsed < (60 * 60))
+	{
+		return nLastPrice;
+	}
+	nLastPriceCheck = GetAdjustedTime();
+	double dPriorPrice = 0;
+	double dPriorPhase = 0;
+	double out_BTC = 0;
+	nLastPrice = GetPBase(out_BTC);
+	return nLastPrice;
+}
+	
+
+double GetProminenceCap(std::string sCampaignName, double nPoints, double nProminence)
+{
+	if (sCampaignName != "CAMEROON-ONE")
+		return nProminence;
+	double nCameroonOneMonthlyRate = GetSporkDouble("cameroononemonthlyrate", 40);
+	double nDailyCharges = nCameroonOneMonthlyRate / 30;
+	double nUSDSpent = nPoints / 1000;  // Amount user spent in one day on children
+	double nChildrenSponsored = nUSDSpent / nDailyCharges;
+	// Cap @ BBP Rate * Child Count
+	double nPrice = GetBBPPrice();
+	if (nPrice <= 0)
+		nPrice = .0004; // Guess
+	double nPaymentsLimit = 950000 * .50;  // (CRITICAL TODO) Adjust this to the spork being voted on;
+	double nUserReward = nPaymentsLimit * nProminence;
+	double nRewardUSD = nUserReward * nPrice;
+	if (nRewardUSD > nUSDSpent)
+	{
+		// Cap is in effect, so reverse engineer the payment to the actual market value
+		double nProjectedBBP = nUSDSpent / nPrice;
+		double nProjectedProminence = nProjectedBBP / nPaymentsLimit;
+		LogPrintf(" GetProminenceCap Exceeded - new prominence %f ", nProjectedProminence);
+		nProminence = nProjectedProminence;
+	}
+	LogPrintf("\n GetProminenceCap Points %f, Prominence %f, USD Price %f, UserReward %f  ", nPoints, nProminence, nPrice, nRewardUSD);
+	return nProminence;
+}
+
+
+std::string GetCameroonOneChildData()
+{
+	static int64_t nLastQuery = 0;
+	static std::string sCache;
+	int64_t nElapsed = GetAdjustedTime() - nLastQuery;
+	if (nElapsed < (60 * 1))
+	{
+		return sCache;
+	}
+	std::string sURL = "https://" + GetSporkValue("cameroonone");
+	std::string sRestfulURL = GetSporkValue("childapi");
+	sURL = "https://pool.biblepay.org";
+	// CRITICAL TODO
+	sRestfulURL = "SAN/Integration/CameroonOne.csv";
+	sCache = BiblepayHTTPSPost(false, 0, "", "", "", sURL, sRestfulURL, 443, "", 25, 10000, 1);
+	nLastQuery = GetAdjustedTime();
+	return sCache;
+}
+
+
+double GetCameroonChildBalance(std::string sChildID)
+{
+	std::string sData = GetCameroonOneChildData();
+	std::vector<std::string> vRows = Split(sData.c_str(), "\n");
+	// Child ID, Added, DR/CR, Notes
+	double dTotal = -999;  // -999 means child not found.
+	for (int i = 1; i < vRows.size(); i++)
+	{
+		vRows[i] = strReplace(vRows[i], "\r", "");
+		vRows[i] = strReplace(vRows[i], "\n", "");
+		vRows[i] = strReplace(vRows[i], "\"", "");
+		std::vector<std::string> vCols = Split(vRows[i].c_str(), ",");
+		if (vCols.size() >= 4)
+		{
+			std::string sID = vCols[0];
+			if (sID == sChildID)
+			{
+				std::string sAdded = vCols[1];
+				double dr = cdbl(vCols[2], 2);
+				std::string sNotes = vCols[3];
+				if (dTotal == -999) 
+					dTotal = 0;
+				dTotal += dr;
+				if (fDebugSpam)
+					LogPrintf("childid %s, added %s, notes %s DrCr %f total %f \n", sID, sAdded, sNotes, dr, dTotal);
+			}
+		}
+	}
+	return dTotal;
+}
+
+
 //////////////////////////////////////////////////////////////////////////////// Watchman-On-The-Wall /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //											BiblePay's version of The Sentinel, written by the BiblePay Devs (March 31st, 2019)                                                                                      //
 //                                                                                                                                                                                                                   //
@@ -250,7 +351,7 @@ std::string GetGSCContract(int nHeight, bool fCreating)
 	return sContract;
 }
 
-double CalculatePoints(std::string sCampaign, std::string sDiary, double nCoinAge, CAmount nDonation)
+double CalculatePoints(std::string sCampaign, std::string sDiary, double nCoinAge, CAmount nDonation, std::string sCPK)
 {
 	boost::to_upper(sCampaign);
 	double nPoints = 0;
@@ -272,6 +373,30 @@ double CalculatePoints(std::string sCampaign, std::string sDiary, double nCoinAg
 		double nMultiplier = sDiary.empty() ? 0 : 1;
 		nPoints = nCoinAge * nMultiplier;
 		return nPoints;
+	}
+	else if (sCampaign == "CAMEROON-ONE")
+	{
+		double nTotalPoints = 0;
+		// We need to find how many children this CPK sponsors first.
+		std::map<std::string, CPK> cp1 = GetChildMap("cpk|cameroon-one");
+		for (std::pair<std::string, CPK> a : cp1)
+		{
+			std::string sSponsorCPK = a.second.sAddress;
+			std::string sChildID = a.second.sOptData;
+			if (!sChildID.empty() && sSponsorCPK == sCPK)
+			{
+				double nBalance = GetCameroonChildBalance(sChildID);
+				if (nBalance != -999 && nBalance <= 0)
+				{
+					// This child is in good standing (with a credit balance).
+					double nCameroonOneMonthlyRate = GetSporkDouble("cameroononemonthlyrate", 40);
+					double nDailyCharges = nCameroonOneMonthlyRate / 30;
+					nTotalPoints += (nDailyCharges * 1000);
+					LogPrintf("\nFound Cameroon-One Child %s for CPK %s, crediting Daily Charges %f, TotalPoints %f ", sChildID, sSponsorCPK, nDailyCharges, nTotalPoints);
+				}
+			}
+		}
+		return nTotalPoints;
 	}
 	return 0;
 }
@@ -389,7 +514,7 @@ std::string AssessBlocks(int nHeight, bool fCreatingContract)
 					if (CheckCampaign(sCampaignName) && !sCPK.empty())
 					{
 						std::string sDiary = ExtractXML(block.vtx[n]->GetTxMessage(), "<diary>","</diary>");
-						double nPoints = CalculatePoints(sCampaignName, sDiary, nCoinAge, nDonation);
+						double nPoints = CalculatePoints(sCampaignName, sDiary, nCoinAge, nDonation, sCPK);
 						if (nPoints > 0)
 						{
 							// CPK 
@@ -399,12 +524,24 @@ std::string AssessBlocks(int nHeight, bool fCreatingContract)
 							c.sAddress = sCPK;
 							c.sNickName = localCPK.sNickName;
 							mPoints[sCPK] = c;
-							// Campaign Points
-							mCampaignPoints[sCampaignName] += nPoints;
-							// CPK-Campaign
 							CPK cCPKCampaignPoints = mCPKCampaignPoints[sCPK + sCampaignName];
+							
+							// Campaign Points
+							if (c.sCampaign != "CAMEROON-ONE")
+							{
+								mCampaignPoints[sCampaignName] += nPoints;
+							}
+							else if (c.sCampaign == "CAMEROON-ONE" && cCPKCampaignPoints.nPoints == 0)
+							{
+								mCampaignPoints[sCampaignName] += nPoints;
+							}
+							// CPK-Campaign
 							cCPKCampaignPoints.sAddress = sCPK;
 							cCPKCampaignPoints.sNickName = c.sNickName;
+							if (c.sCampaign == "CAMEROON-ONE")
+							{
+								cCPKCampaignPoints.nPoints = 0;  // CPK only gets credit once per day per orphan
+							}
 							cCPKCampaignPoints.nPoints += nPoints;
 							mCPKCampaignPoints[sCPK + sCampaignName] = cCPKCampaignPoints;
 							if (dDebugLevel == 1)
@@ -452,7 +589,12 @@ std::string AssessBlocks(int nHeight, bool fCreatingContract)
 		for (auto Members : mPoints)
 		{
 			std::string sKey = Members.second.sAddress + sCampaignName;
-			mCPKCampaignPoints[sKey].nProminence = (mCPKCampaignPoints[sKey].nPoints / nCampaignPoints) * nCampaignPercentage;
+			
+			double nPreProminence = (mCPKCampaignPoints[sKey].nPoints / nCampaignPoints) * nCampaignPercentage;
+			// Verify we did not exceed the cap
+			double nCap = GetProminenceCap(sCampaignName, mCPKCampaignPoints[sKey].nPoints, nPreProminence);
+			mCPKCampaignPoints[sKey].nProminence = nCap;
+
 			if (fDebugSpam)
 				LogPrintf("\nUser %s, Campaign %s, Points %f, Prominence %f ", mCPKCampaignPoints[sKey].sAddress, sCampaignName, 
 				mCPKCampaignPoints[sKey].nPoints, mCPKCampaignPoints[sKey].nProminence);

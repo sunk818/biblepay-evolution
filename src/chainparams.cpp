@@ -237,6 +237,7 @@ public:
 		consensus.BIP66Height = 123200; // 00000000000b1fa2dfa312863570e13fae9ca7b5566cb27e55422620b469aefa
 
 		consensus.DIP0001Height = 220000;
+		consensus.DIP0003Height = 200000;
 		consensus.QTHeight = 124000;  // Note to future forkers of BiblePay!  This height must be > (BLOCKS_PER_DAY * 32)!  Thank you for forking biblepay and thank you for your support!
 		consensus.powLimit = uint256S("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); 
 		consensus.FoundationAddress = "BB2BwSbDCqCqNsfc7FgWFJn4sRgnUt4tsM";
@@ -425,6 +426,8 @@ public:
         consensus.BIP65Height = 2431; 
         consensus.BIP66Height = 2075; 
         consensus.DIP0001Height = 205000;
+		consensus.DIP0003Height = 200000;
+
         consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); 
         consensus.nPowTargetTimespan = 24 * 60 * 60; // Biblepay: 1 day
         consensus.nPowTargetSpacing = 1 * 60; // Biblepay: 1 minutes
@@ -586,6 +589,8 @@ public:
 		consensus.BIP65Height = 1; // BIP65 activated immediately on devnet
 		consensus.BIP66Height = 1; // BIP66 activated immediately on devnet
 		consensus.DIP0001Height = 2; // DIP0001 activated immediately on devnet
+		consensus.DIP0003Height = 2;
+
 		consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); // ~uint256(0) >> 1
 		consensus.nPowTargetTimespan = 24 * 60 * 60; // Biblepay: 1 day
 		consensus.nPowTargetSpacing = 2.5 * 60; // Biblepay: 2.5 minutes

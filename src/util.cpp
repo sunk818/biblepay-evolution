@@ -905,7 +905,8 @@ void RenameThread(const char* name)
     // Prevent warnings for unused parameters...
     (void)name;
 #endif
-    LogPrintf("%s: thread new name %s\n", __func__, name);
+	if (fDebugSpam)
+		LogPrintf("%s: thread new name %s\n", __func__, name);
 }
 
 std::string GetThreadName()

@@ -1950,7 +1950,8 @@ std::string BiblepayHTTPSPost(bool bPost, int iThreadID, std::string sActionName
 					iMaxSize = dMaxSize + (int)foundPos + 16;
 				}
 			}
-			if ((int)sData.size() >= (iMaxSize-1)) break;
+			if ((int)sData.size() >= (iMaxSize-1)) 
+				break;
 		}
 		// R ANDREW - JAN 4 2018: Free bio resources
 		BIO_free_all(bio);
