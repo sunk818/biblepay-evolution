@@ -421,12 +421,12 @@ public:
 		consensus.FoundationQTAddress = "ygGKQR4bYwjGaEnX8KCyzEJhht4paYCiuo";
 		consensus.nDCCSuperblockStartBlock = 4504; 
         consensus.nDCCSuperblockCycle = BLOCKS_PER_DAY; // Daily
-        consensus.BIP34Height = 120000;
+        consensus.BIP34Height = 64960;
         consensus.BIP34Hash = uint256S("0x0");
         consensus.BIP65Height = 2431; 
         consensus.BIP66Height = 2075; 
         consensus.DIP0001Height = 205000;
-		consensus.DIP0003Height = 200000;
+		consensus.DIP0003Height = 64960; 
 
         consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); 
         consensus.nPowTargetTimespan = 24 * 60 * 60; // Biblepay: 1 day

@@ -38,7 +38,7 @@
 #include <boost/assign/list_of.hpp>
 #include <boost/shared_ptr.hpp>
 #include <univalue.h>
-extern std::map<std::string, std::string> mapArgs;  // setgenerate needs this map
+extern std::unordered_map<std::string, std::string> mapArgs;  // setgenerate needs this map
 
 /**
  * Return average network hashes per second based on the last 'lookup' blocks,
