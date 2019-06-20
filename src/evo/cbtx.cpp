@@ -71,7 +71,7 @@ bool CheckCbTxMerkleRoots(const CBlock& block, const CBlockIndex* pindex, CValid
 		LogPrint("bench", "          - GetTxPayload: %.2fms [%.2fs]\n", 0.001 * (nTime2 - nTime1), nTimePayload * 0.000001);
 
 	const Consensus::Params& consensusParams = Params().GetConsensus();
-    bool fActive = pindex && pindex->nHeight >= consensusParams.BIP34Height;
+    bool fActive = pindex && pindex->nHeight >= consensusParams.DIP0003EnforcementHeight;
 
     if (pindex && fActive) {
         uint256 calculatedMerkleRoot;
