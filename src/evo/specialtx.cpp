@@ -22,7 +22,8 @@ bool CheckSpecialTx(const CTransaction& tx, const CBlockIndex* pindexPrev, CVali
     if (tx.nVersion != 3 || tx.nType == TRANSACTION_NORMAL)
         return true;
 
-    if (pindexPrev && pindexPrev->nHeight + 1 < Params().GetConsensus().DIP0003Height) {
+	bool fCheckPreDip3Blocks = false;
+    if (fCheckPreDip3Blocks && pindexPrev && pindexPrev->nHeight + 1 < Params().GetConsensus().DIP0003Height) {
         return state.DoS(10, false, REJECT_INVALID, "bad-tx-type");
     }
 
