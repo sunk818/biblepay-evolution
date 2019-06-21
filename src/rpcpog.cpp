@@ -831,7 +831,7 @@ bool VoteManyForGobject(std::string govobj, std::string strVoteSignal, std::stri
 		sError = "Voting failed.";
 		return false;
 	}
-    nSuccessful = cdbl(vOutcome["success_count"].get_str(), 0);
+    nSuccessful = cdbl(vOutcome["success_count"].getValStr(), 0);
 	bool fResult = nSuccessful > 0 ? true : false;
 	return fResult;
 }
@@ -1669,7 +1669,8 @@ void MemorizeBlockChainPrayers(bool fDuringConnectBlock, bool fSubThread, bool f
 			nDeserializedHeight = 0;
 		}
 	}
-	LogPrintf("Memorizing prayers tip height %f @ time %f deserialized height %f ", chainActive.Tip()->nHeight, GetAdjustedTime(), nDeserializedHeight);
+	if (fDebugSpam && fColdBoot)
+		LogPrintf("Memorizing prayers tip height %f @ time %f deserialized height %f ", chainActive.Tip()->nHeight, GetAdjustedTime(), nDeserializedHeight);
 
 	int nMaxDepth = chainActive.Tip()->nHeight;
 	int nMinDepth = fDuringConnectBlock ? nMaxDepth - 2 : nMaxDepth - (BLOCKS_PER_DAY * 30 * 12);  // One year
@@ -1716,7 +1717,8 @@ void MemorizeBlockChainPrayers(bool fDuringConnectBlock, bool fSubThread, bool f
 			SerializePrayersToFile(nMaxDepth - 1);
 		}
 	}
-	LogPrintf("...Finished MemorizeBlockChainPrayers @ %f ", GetAdjustedTime());
+	if (fColdBoot && fDebugSpam)
+		LogPrintf("...Finished MemorizeBlockChainPrayers @ %f ", GetAdjustedTime());
 }
 
 std::string SignMessageEvo(std::string strAddress, std::string strMessage, std::string& sError)

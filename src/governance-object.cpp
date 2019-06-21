@@ -182,9 +182,10 @@ bool CGovernanceObject::ProcessVote(CNode* pfrom,
 
     int64_t nNow = GetAdjustedTime();
     int64_t nVoteTimeUpdate = voteInstanceRef.nTime;
+	int nVoteDivisor = fProd ? 20 : 60;
     if (governance.AreRateChecksEnabled()) {
         int64_t nTimeDelta = nNow - voteInstanceRef.nTime;
-        if (nTimeDelta < GOVERNANCE_UPDATE_MIN) {
+        if (nTimeDelta < (GOVERNANCE_UPDATE_MIN / nVoteDivisor)) {
             std::ostringstream ostr;
             ostr << "CGovernanceObject::ProcessVote -- Masternode voting too often"
                  << ", MN outpoint = " << vote.GetMasternodeOutpoint().ToStringShort()

@@ -75,7 +75,6 @@ double GetBBPPrice()
 	nLastPrice = GetPBase(out_BTC);
 	return nLastPrice;
 }
-	
 
 double GetProminenceCap(std::string sCampaignName, double nPoints, double nProminence)
 {
@@ -114,11 +113,8 @@ std::string GetCameroonOneChildData()
 	{
 		return sCache;
 	}
-	std::string sURL = "https://" + GetSporkValue("cameroonone");
+	std::string sURL = GetSporkValue("cameroonone");
 	std::string sRestfulURL = GetSporkValue("childapi");
-	sURL = "https://pool.biblepay.org";
-	// CRITICAL TODO
-	sRestfulURL = "SAN/Integration/CameroonOne.csv";
 	sCache = BiblepayHTTPSPost(false, 0, "", "", "", sURL, sRestfulURL, 443, "", 25, 10000, 1);
 	nLastQuery = GetAdjustedTime();
 	return sCache;
@@ -877,14 +873,14 @@ bool SubmitGSCTrigger(std::string sHex, std::string& gobjecthash, std::string& s
 
 	if (govobj.GetObjectType() == GOVERNANCE_OBJECT_TRIGGER) 
 	{
-        if (!dmn) 
+        if (dmn) 
 		{
             govobj.SetMasternodeOutpoint(activeMasternodeInfo.outpoint);
             govobj.Sign(*activeMasternodeInfo.blsKeyOperator);
         }
 		else 
 		{
-            sError = "Object submission rejected because node is not a Sanctuary\n";
+            sError = "Object submission rejected because Sanctuary is not running in deterministic mode\n";
 			return false;
         }
     }

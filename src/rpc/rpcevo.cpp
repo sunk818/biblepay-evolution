@@ -1237,13 +1237,16 @@ UniValue sponsorchild(const JSONRPCRequest& request)
 			"\nYour new child ID is: " + sChildId + "\nNOTE: You will not receive rewards for this child until Cameroon One posts a credit to your account for this child.  "
 			"\nIt can take 7-14 days to provision a new child, receive and post your payment, so please, be patient. "
 			"\nTo check the status of your child, type 'listchildren' into the RPC."
-		    "\nPlease mail a check for $40.00 (this is a tax deductible donation) to:"
+			"\nOption 1:  Please mail a check for $40.00 (this is a tax deductible donation) to:"
 			"\nCameroon One A/R"
 			"\n28 Hawthorne St Unit 1"
 			"\nBoston, MA 02119 USA"
 			"\n!NOTE! You must write Child ID #" + sChildId + " on your check."
-			"\nPayPal:"
-			"\nGlobalGiving Match:";
+			"\nOption 2: [Preferred] For the most efficient/fastest credit use PayPal (accepting Credit Cards and international payments):"
+			"\nPayPal: Send money to https://PayPal.Me/CameroonONE "
+			"\nNOTE: Please paste the BiblePay hex child ID #" + sChildId + " in the Paypal NOTES textbox before submitting the payment."
+			"\nOption 3:  GlobalGiving Match:";
+			"\nTo use Global Giving, see this page https://www.globalgiving.org/recurring-donations-matched/ and set up a recurring donation, then notify Anna with CameroonONE <Anna.Cavolowsky@cameroonone.org> with your ChildID and verify the recurring donation is set up.";
 		std::vector<std::string> vNarr = Split(sNarr.c_str(), "\n");
 		for (int i = 0; i < vNarr.size(); i++)
 		{
