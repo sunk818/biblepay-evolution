@@ -429,7 +429,7 @@ public:
         consensus.BIP66Height = 2075; 
         consensus.DIP0001Height = 205000;
 		consensus.DIP0003Height = 64960; 
-		consensus.DIP0003EnforcementHeight = 120000;
+		consensus.DIP0003EnforcementHeight = 64960;
 
         consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); 
         consensus.nPowTargetTimespan = 24 * 60 * 60; // Biblepay: 1 day

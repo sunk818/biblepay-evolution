@@ -61,6 +61,7 @@ void CActiveMasternodeManager::Init()
 
     if (!fMasternodeMode) return;
 
+	// Critical (TODO) - Verify our dip3 enforcement height matches dip003 start height
     if (!deterministicMNManager->IsDIP3Enforced()) return;
 
     // Check that our local network configuration is correct
