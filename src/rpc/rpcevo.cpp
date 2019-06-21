@@ -1127,7 +1127,7 @@ UniValue protx_diff(const JSONRPCRequest& request)
 UniValue nonfinancialtxtojson(const JSONRPCRequest& request)
 {
 	if (request.fHelp)
-		throw std::runtime_error("Describes a non-financial transaction (dev use only).");
+		throw std::runtime_error("nonfinancialtxtojson txid\nDescribes a non-financial transaction (dev use only).");
 
 	uint256 uHash = ParseHashV(request.params[0], "nonFinancialTxId");
     CTransactionRef nonFinTx;
@@ -1158,7 +1158,7 @@ UniValue nonfinancialtxtojson(const JSONRPCRequest& request)
 UniValue createnonfinancialtransaction(const JSONRPCRequest& request)
 {
 	if (request.fHelp)
-		throw std::runtime_error("Creates a non-financial transaction (dev use only).");
+		throw std::runtime_error("createnonfinancialtransaction (dev use only)\nCreates a non-financial transaction (dev use only).");
 
 	CNonFinancialTx ptx;
 	ptx.nVersion = CProRegTx::CURRENT_VERSION;
@@ -1208,7 +1208,8 @@ UniValue sponsorchild(const JSONRPCRequest& request)
 	// Sponsor a CameroonOne Child
 	if (request.fHelp)
 		throw std::runtime_error(
-		"Sponsors a new child through Cameroon One.  You may have more than one child per CPK (Currently we do not have a limit).  \n"
+		"sponsorchild authorize"
+		"\nSponsors a new child through Cameroon One.  You may have more than one child per CPK (Currently we do not have a limit).  \n"
 		"Note:  We will send 50,000 BBP to the foundation as a donation each time you sponsor a child (this is to prevent Cameroon One abuse). \n "
 		"You must specify true to authorize the 50,000 bbp tithe.  Example:  sponsorchild authorize.");
 
@@ -1246,7 +1247,8 @@ UniValue sponsorchild(const JSONRPCRequest& request)
 			"\nPayPal: Send money to https://PayPal.Me/CameroonONE "
 			"\nNOTE: Please paste the BiblePay hex child ID #" + sChildId + " in the Paypal NOTES textbox before submitting the payment."
 			"\nOption 3:  GlobalGiving Match:";
-			"\nTo use Global Giving, see this page https://www.globalgiving.org/recurring-donations-matched/ and set up a recurring donation, then notify Anna with CameroonONE <Anna.Cavolowsky@cameroonone.org> with your ChildID and verify the recurring donation is set up.";
+			"\nTo use Global Giving, see this page https://www.globalgiving.org/recurring-donations-matched/ and set up a recurring donation, then notify Anna with CameroonONE <Anna.Cavolowsky@cameroonone.org> with your ChildID and verify the recurring donation is set up."
+			"\n";
 		std::vector<std::string> vNarr = Split(sNarr.c_str(), "\n");
 		for (int i = 0; i < vNarr.size(); i++)
 		{
@@ -1260,26 +1262,41 @@ UniValue listchildren(const JSONRPCRequest& request)
 {
 	// List sponsored children by the User's CPK
 	if (request.fHelp)
-		throw std::runtime_error("Returns a list of children sponsored by the users CPK.");
+		throw std::runtime_error(
+		"listchildren"
+		"\nReturns a list of children sponsored by the users CPK."
+		"\nSpecify listchildren all to see all sponsored children."
+		"\nOtherwise, specify listchildren to see your sponsored children");
+	if (request.params.size() > 1)
+			throw std::runtime_error("You must specify listchildren or listchildren all.  All will list all children, otherwise we list your sponsored children. ");
+	bool fAll = false;
+	if (request.params.size() > 0)
+		fAll = request.params[0].getValStr() == "true";
+
     UniValue results(UniValue::VOBJ);
 	results.push_back(Pair("List Of", "Cameroon-One Children"));
 	std::map<std::string, CPK> cp1 = GetChildMap("cpk|cameroon-one");
+	std::string sMyCPK = DefaultRecAddress("Christian-Public-Key");
 	for (std::pair<std::string, CPK> a : cp1)
 	{
 		std::string sCPK = a.second.sAddress;
 		std::string sChildID = a.second.sOptData;
 		std::string sBIOUrl = "https://cameroonone.org/biblepay/" + sChildID + ".htm";
-		double nBalance = 0; // GetChildBalance(sChildID);  <- Reserved until we finish API integration.
+		double nBalance = 0; 
 		std::string sChildName; // We may or may not be able to retrieve this from the API (pending).
 		CPK userCPK = GetCPKFromProject("cpk", sCPK);
 		if (!sChildID.empty())
 		{
-			results.push_back(Pair("Child ID [" + sChildID + "]", a.second.sAddress));
-			results.push_back(Pair("Biography", sBIOUrl));
-			results.push_back(Pair("Balance", nBalance));
-			results.push_back(Pair("Nickname", userCPK.sNickName));
-			if (!sChildName.empty())
-				results.push_back(Pair("Child Name", sChildName));
+			if (fAll || a.second.sAddress == sMyCPK)
+			{
+				results.push_back(Pair("Child ID",  sChildID));
+				results.push_back(Pair("CPK", a.second.sAddress));
+				results.push_back(Pair("Biography", sBIOUrl));
+				results.push_back(Pair("Balance", nBalance));
+				results.push_back(Pair("Nickname", userCPK.sNickName));
+				if (!sChildName.empty())
+					results.push_back(Pair("Child Name", sChildName));
+			}
 		}
 	}
 	return results;

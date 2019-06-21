@@ -62,7 +62,9 @@ void CActiveMasternodeManager::Init()
     if (!fMasternodeMode) return;
 
 	// Critical (TODO) - Verify our dip3 enforcement height matches dip003 start height
-    if (!deterministicMNManager->IsDIP3Enforced()) return;
+	// R Andrews:  We need to discuss this Devs; This logic seems faulty.  If Dip3 is not enforced, we lose the ability to bring the sanc online with an ipv4 address here.
+	if (false) 
+		if (!deterministicMNManager->IsDIP3Enforced()) return;
 
     // Check that our local network configuration is correct
     if (!fListen) {

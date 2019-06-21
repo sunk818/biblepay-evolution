@@ -2725,7 +2725,7 @@ UniValue exec(const JSONRPCRequest& request)
 			throw std::runtime_error("You must specify the childID.");
 		std::string sChildID = request.params[1].get_str();
 		double dBal = GetCameroonChildBalance(sChildID);
-		results.push_back(Pair("childid", dBal));
+		results.push_back(Pair("Balance", dBal));
 	}
 	else if (sItem == "datalist")
 	{
