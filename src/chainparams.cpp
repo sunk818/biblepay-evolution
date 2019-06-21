@@ -239,6 +239,7 @@ public:
 		consensus.DIP0001Height = 220000;
 		consensus.DIP0003Height = 200000;
 		consensus.DIP0003EnforcementHeight = 200000;
+		consensus.DIP0003HeightPhase2 = 200000;
 
 		consensus.QTHeight = 124000;  // Note to future forkers of BiblePay!  This height must be > (BLOCKS_PER_DAY * 32)!  Thank you for forking biblepay and thank you for your support!
 		consensus.powLimit = uint256S("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); 
@@ -430,6 +431,7 @@ public:
         consensus.DIP0001Height = 205000;
 		consensus.DIP0003Height = 64960; 
 		consensus.DIP0003EnforcementHeight = 64960;
+		consensus.DIP0003HeightPhase2 = 120000;
 
         consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); 
         consensus.nPowTargetTimespan = 24 * 60 * 60; // Biblepay: 1 day
