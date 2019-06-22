@@ -2278,6 +2278,12 @@ double GetVINCoinAge(int64_t nBlockTime, CTransactionRef tx)
 		CAmount nAmount = 0;
 		int64_t nTime = 0;
 		bool fOK = GetTransactionTimeAndAmount(tx->vin[i].prevout.hash, n, nTime, nAmount);
+		// CRITICAL (TODO) R Andrews: Stop Sanctuary unlocking here (Allow our small stakers to stake, be kind to the poor)
+		if (nAmount == (SANCTUARY_COLLATERAL * COIN)) 
+		{
+			LogPrintf("\nGetVinCoinAge, Detected unlocked sanctuary in txid %s, Amount %f ", tx->GetHash().GetHex(), nAmount/COIN);
+			nAmount = 0;
+		}
 		if (fOK && nTime > 0 && nAmount > 0)
 		{
 			double nAge = (nBlockTime - nTime) / (86400 + .01);
@@ -2296,7 +2302,8 @@ double GetAntiBotNetWeight(int64_t nBlockTime, CTransactionRef tx)
 	bool fSigned = CheckAntiBotNetSignature(tx, "abn");
 	if (!fSigned) 
 	{
-		LogPrintf("antibotnetsignature failed on tx %s with purported coin-age of %f \n",tx->GetHash().GetHex(), nCoinAge);
+		LogPrintf("antibotnetsignature failed on tx %s with purported coin-age of %f \n",
+			tx->GetHash().GetHex(), nCoinAge);
 		return 0;
 	}
 	return nCoinAge;

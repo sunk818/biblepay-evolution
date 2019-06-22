@@ -221,10 +221,11 @@ std::vector<CSuperblock_sptr> CGovernanceTriggerManager::GetActiveTriggers()
 
 bool CSuperblockManager::IsSuperblockTriggered(int nBlockHeight)
 {
-    LogPrint("gobject", "CSuperblockManager::IsSuperblockTriggered -- Start nBlockHeight = %d\n", nBlockHeight);
-    if (!CSuperblock::IsValidBlockHeight(nBlockHeight)) {
+    if (!CSuperblock::IsValidBlockHeight(nBlockHeight) && !CSuperblock::IsSmartContract(nBlockHeight)) {
         return false;
     }
+	if (fDebugSpam)
+		LogPrint("gobject", "CSuperblockManager::IsSuperblockTriggered -- Start nBlockHeight = %d\n", nBlockHeight);
 
     LOCK(governance.cs);
     // GET ALL ACTIVE TRIGGERS
@@ -245,14 +246,16 @@ bool CSuperblockManager::IsSuperblockTriggered(int nBlockHeight)
             continue;
         }
 
-        LogPrint("gobject", "CSuperblockManager::IsSuperblockTriggered -- data = %s\n", pObj->GetDataAsPlainString());
+		if (nBlockHeight == pSuperblock->GetBlockHeight())
+			LogPrint("gobject", "CSuperblockManager::IsSuperblockTriggered -- data = %s\n", pObj->GetDataAsPlainString());
 
         // note : 12.1 - is epoch calculation correct?
 
-        if (nBlockHeight != pSuperblock->GetBlockHeight()) {
-            LogPrint("gobject", "CSuperblockManager::IsSuperblockTriggered -- block height doesn't match nBlockHeight = %d, blockStart = %d, continuing\n",
-                nBlockHeight,
-                pSuperblock->GetBlockHeight());
+        if (nBlockHeight != pSuperblock->GetBlockHeight()) 
+		{
+			if (fDebugSpam)
+			    LogPrint("gobject", "CSuperblockManager::IsSuperblockTriggered -- block height doesn't match nBlockHeight = %d, blockStart = %d, continuing\n",
+				    nBlockHeight,pSuperblock->GetBlockHeight());
             continue;
         }
 
