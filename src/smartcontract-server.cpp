@@ -103,7 +103,6 @@ double GetProminenceCap(std::string sCampaignName, double nPoints, double nPromi
 	return nProminence;
 }
 
-
 std::string GetCameroonOneChildData()
 {
 	static int64_t nLastQuery = 0;
@@ -119,7 +118,6 @@ std::string GetCameroonOneChildData()
 	nLastQuery = GetAdjustedTime();
 	return sCache;
 }
-
 
 double GetCameroonChildBalance(std::string sChildID)
 {

@@ -11,6 +11,7 @@
 #include "rpc/server.h"
 #include "utilmoneystr.h"
 #include "validation.h"
+#include "smartcontract-server.h"
 
 #ifdef ENABLE_WALLET
 #include "wallet/coincontrol.h"
@@ -1246,7 +1247,7 @@ UniValue sponsorchild(const JSONRPCRequest& request)
 			"\nOption 2: [Preferred] For the most efficient/fastest credit use PayPal (accepting Credit Cards and international payments):"
 			"\nPayPal: Send money to https://PayPal.Me/CameroonONE "
 			"\nNOTE: Please paste the BiblePay hex child ID #" + sChildId + " in the Paypal NOTES textbox before submitting the payment."
-			"\nOption 3:  GlobalGiving Match:";
+			"\nOption 3:  GlobalGiving Match:"
 			"\nTo use Global Giving, see this page https://www.globalgiving.org/recurring-donations-matched/ and set up a recurring donation, then notify Anna with CameroonONE <Anna.Cavolowsky@cameroonone.org> with your ChildID and verify the recurring donation is set up."
 			"\n";
 		std::vector<std::string> vNarr = Split(sNarr.c_str(), "\n");
@@ -1282,17 +1283,19 @@ UniValue listchildren(const JSONRPCRequest& request)
 		std::string sCPK = a.second.sAddress;
 		std::string sChildID = a.second.sOptData;
 		std::string sBIOUrl = "https://cameroonone.org/biblepay/" + sChildID + ".htm";
-		double nBalance = 0; 
 		std::string sChildName; // We may or may not be able to retrieve this from the API (pending).
 		CPK userCPK = GetCPKFromProject("cpk", sCPK);
 		if (!sChildID.empty())
 		{
 			if (fAll || a.second.sAddress == sMyCPK)
 			{
-				results.push_back(Pair("Child ID",  sChildID));
+				results.push_back(Pair("Child ID", sChildID));
 				results.push_back(Pair("CPK", a.second.sAddress));
 				results.push_back(Pair("Biography", sBIOUrl));
+				double nBalance = GetCameroonChildBalance(sChildID);
 				results.push_back(Pair("Balance", nBalance));
+				if (nBalance == -999)
+					results.push_back(Pair("Notes", "This child is not provisioned yet."));
 				results.push_back(Pair("Nickname", userCPK.sNickName));
 				if (!sChildName.empty())
 					results.push_back(Pair("Child Name", sChildName));

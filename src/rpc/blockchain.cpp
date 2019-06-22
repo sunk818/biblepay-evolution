@@ -2099,8 +2099,15 @@ UniValue exec(const JSONRPCRequest& request)
 		if (sType.empty() || sPrimaryKey.empty() || sValue.empty())
 			throw std::runtime_error(sError);
 		sError;
-		double dFee = fProd ? 10 : 5001;
-    	std::string sResult = SendBlockchainMessage(sType, sPrimaryKey, sValue, dFee, true, "", sError);
+		double dFee = fProd ? 10 : 50001;
+		const Consensus::Params& consensusParams = Params().GetConsensus();
+		std::string sSigGSC;
+		std::string sCPK = consensusParams.FoundationAddress;
+		std::string sMsg = RoundToString(GetAdjustedTime(), 0);
+		bool bSigned = SignStake(sCPK, sMsg, sError, sSigGSC);
+		std::string sExtraGscPayload = "<gscsig>" + sSigGSC + "</gscsig><abncpk>" + sCPK + "</abncpk><abnmsg>" + sMsg + "</abnmsg>";
+
+    	std::string sResult = SendBlockchainMessage(sType, sPrimaryKey, sValue, dFee, true, sExtraGscPayload, sError);
 		results.push_back(Pair("Sent", sValue));
 		results.push_back(Pair("TXID", sResult));
 		if (!sError.empty()) results.push_back(Pair("Error", sError));
