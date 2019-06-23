@@ -1272,7 +1272,7 @@ UniValue listchildren(const JSONRPCRequest& request)
 			throw std::runtime_error("You must specify listchildren or listchildren all.  All will list all children, otherwise we list your sponsored children. ");
 	bool fAll = false;
 	if (request.params.size() > 0)
-		fAll = request.params[0].getValStr() == "true";
+		fAll = request.params[0].getValStr() == "true" || request.params[0].getValStr() == "all";
 
     UniValue results(UniValue::VOBJ);
 	results.push_back(Pair("List Of", "Cameroon-One Children"));

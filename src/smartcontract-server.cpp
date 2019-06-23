@@ -82,13 +82,20 @@ double GetProminenceCap(std::string sCampaignName, double nPoints, double nPromi
 		return nProminence;
 	double nCameroonOneMonthlyRate = GetSporkDouble("cameroononemonthlyrate", 40);
 	double nDailyCharges = nCameroonOneMonthlyRate / 30;
+	if (nDailyCharges <= .01)
+		return 0;
 	double nUSDSpent = nPoints / 1000;  // Amount user spent in one day on children
 	double nChildrenSponsored = nUSDSpent / nDailyCharges;
 	// Cap @ BBP Rate * Child Count
 	double nPrice = GetBBPPrice();
 	if (nPrice <= 0)
 		nPrice = .0004; // Guess
-	double nPaymentsLimit = 950000 * .50;  // (CRITICAL TODO) Adjust this to the spork being voted on;
+	int nNextSuperblock = 0;
+	int nLastSuperblock = GetLastGSCSuperblockHeight(chainActive.Tip()->nHeight, nNextSuperblock);
+	CAmount nBudget = CSuperblock::GetPaymentsLimit(nNextSuperblock);
+	if (nBudget < 1)
+		return 0;
+	double nPaymentsLimit = (nBudget / COIN);
 	double nUserReward = nPaymentsLimit * nProminence;
 	double nRewardUSD = nUserReward * nPrice;
 	if (nRewardUSD > nUSDSpent)

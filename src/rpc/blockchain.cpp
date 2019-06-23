@@ -2734,6 +2734,11 @@ UniValue exec(const JSONRPCRequest& request)
 		double dBal = GetCameroonChildBalance(sChildID);
 		results.push_back(Pair("Balance", dBal));
 	}
+	else if (sItem == "dailysponsorshipcap")
+	{
+		double nCap = GetProminenceCap("CAMEROON-ONE", 1333, .50);
+		results.push_back(Pair("cap", nCap));
+	}
 	else if (sItem == "datalist")
 	{
 		if (request.params.size() != 2 && request.params.size() != 3)

@@ -35,5 +35,6 @@ std::string DescribeProposal(BiblePayProposal bbpProposal);
 std::string GetTxCPK(CTransactionRef tx, std::string& sCampaignName);
 double CalculatePoints(std::string sCampaign, std::string sDiary, double nCoinAge, CAmount nDonation, std::string sCPK);
 double GetCameroonChildBalance(std::string sChildID);
+double GetProminenceCap(std::string sCampaignName, double nPoints, double nProminence);
 
 #endif
