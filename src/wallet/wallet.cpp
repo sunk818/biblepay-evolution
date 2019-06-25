@@ -2104,6 +2104,9 @@ CAmount CWalletTx::GetAvailableWatchOnlyCredit(const bool& fUseCache) const
     return nCredit;
 }
 
+
+
+
 double CWallet::GetAntiBotNetWalletWeight(double nMinCoinAge, CAmount& nTotalRequired)
 {
     LOCK2(cs_main, cs_wallet);
@@ -2116,7 +2119,19 @@ double CWallet::GetAntiBotNetWalletWeight(double nMinCoinAge, CAmount& nTotalReq
     {
         const CWalletTx* pcoin = &(*it).second;
         uint256 hash = (*it).first;
-        if (pcoin->IsTrusted())
+		
+		if (!CheckFinalTx(*pcoin))
+			continue;
+
+		if (pcoin->IsCoinBase() && pcoin->GetBlocksToMaturity() > 0)
+			continue;
+
+		int nDepth = pcoin->GetDepthInMainChain();
+
+		if (nDepth == 0 && !pcoin->InMempool())
+                continue;
+		
+		if (pcoin->IsTrusted())
 		{
 		    for (unsigned int i = 0; i < pcoin->tx->vout.size(); i++)
 			{
@@ -2125,9 +2140,7 @@ double CWallet::GetAntiBotNetWalletWeight(double nMinCoinAge, CAmount& nTotalReq
 				    isminetype mine = IsMine(pcoin->tx->vout[i]);
 					CAmount nAmount = pcoin->tx->vout[i].nValue;
 					bool fLocked = (nAmount == (SANCTUARY_COLLATERAL * COIN));
-
-					int nDepth = pcoin->GetDepthInMainChain();
-    	
+					// R Andrews, Verify the coin is actually spendable
 					if (nDepth >= GSC_MIN_CONFIRMS && !fLocked && mine != ISMINE_NO && nAmount > (GSC_DUST * COIN) && (nFoundCoinAge < nMinCoinAge || nMinCoinAge == 0))
 					{
 						double nAge = (double)(chainActive.Tip()->pprev->GetBlockTime() - pcoin->GetTxTime()) / 86400;
@@ -2139,8 +2152,8 @@ double CWallet::GetAntiBotNetWalletWeight(double nMinCoinAge, CAmount& nTotalReq
 							nTotal += nWeight;
 							nTotalRequired += nAmount;
 							nFoundCoinAge += nWeight;
-							std::string sData = RoundToString((double)nAmount/COIN, 4) + "(" + RoundToString(nAge, 2) + ")=[" + RoundToString(nWeight, 2) + "],";
-							sCache += sData + "\n";
+							std::string sData = RoundToString((double)nAmount/COIN, 4) + "(" + RoundToString(nAge, 2) + ")=[" + RoundToString(nWeight, 2) + "] depth=" + RoundToString(nDepth, 0) +", ";
+							sCache += sData + "         \n";
 						}
 					}
 				}
@@ -2608,7 +2621,10 @@ void CWallet::AvailableCoins(std::vector<COutput>& vCoins, bool fOnlySafe, const
 
 				// BIBLEPAY - ANTI-BOT NET RULES:
 				if (dMinCoinAge > 0) 
-					if ( pcoin->tx->vout[i].nValue <= (GSC_DUST * COIN) || nDepth < GSC_MIN_CONFIRMS) found = false;
+				{
+					if (pcoin->tx->vout[i].nValue <= (GSC_DUST * COIN) || nDepth < GSC_MIN_CONFIRMS || pcoin->tx->vout[i].nValue == SANCTUARY_COLLATERAL * COIN) 
+						found = false;
+				}
 		
 
                 if(!found) continue;
@@ -3542,7 +3558,7 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
                         strFailReason = _("Unable to locate enough PrivateSend denominated funds for this transaction.");
                         strFailReason += " " + _("PrivateSend uses exact denominated amounts to send funds, you might simply need to anonymize some more coins.");
                     } else if (nValueIn < nValueToSelect) {
-                        strFailReason = _("Insufficient funds.");
+                        strFailReason = _("(Create Transaction) Insufficient funds.");
                         if (fUseInstantSend) {
                             // could be not true but most likely that's the reason
                             strFailReason += " " + strprintf(_("InstantSend requires inputs with at least %d confirmations, you might need to wait a few minutes and try again."), nInstantSendConfirmationsRequired);
@@ -4232,7 +4248,8 @@ void CWallet::ReserveKeyFromKeyPool(int64_t& nIndex, CKeyPool& keypool, bool fIn
         }
 
         assert(keypool.vchPubKey.IsValid());
-        LogPrintf("keypool reserve %d\n", nIndex);
+		if (fDebugSpam)
+			LogPrintf("keypool reserve %d\n", nIndex);
     }
 }
 
@@ -4247,7 +4264,8 @@ void CWallet::KeepKey(int64_t nIndex)
         if (!nWalletBackups)
             nKeysLeftSinceAutoBackup = 0;
     }
-    LogPrintf("keypool keep %d\n", nIndex);
+	if (fDebugSpam)
+		LogPrintf("keypool keep %d\n", nIndex);
 }
 
 void CWallet::ReturnKey(int64_t nIndex, bool fInternal)
@@ -4261,7 +4279,8 @@ void CWallet::ReturnKey(int64_t nIndex, bool fInternal)
             setExternalKeyPool.insert(nIndex);
         }
     }
-    LogPrintf("keypool return %d\n", nIndex);
+	if (fDebugSpam)
+		LogPrintf("keypool return %d\n", nIndex);
 }
 
 bool CWallet::GetKeyFromPool(CPubKey& result, bool fInternal)
