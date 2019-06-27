@@ -9,7 +9,6 @@
 #include "rpcpodc.h"
 #include "init.h"
 #include "activemasternode.h"
-#include "masternodeman.h"
 #include "governance-classes.h"
 #include "governance.h"
 #include "masternode-sync.h"
@@ -47,6 +46,9 @@
 extern CWallet* pwalletMain;
 #endif // ENABLE_WALLET
 
+UniValue VoteWithMasternodes(const std::map<uint256, CKey>& keys,	
+                             const uint256& hash, vote_signal_enum_t eVoteSignal,	
+                             vote_outcome_enum_t eVoteOutcome);
 
 std::string GenerateNewAddress(std::string& sError, std::string sName)
 {
@@ -293,12 +295,14 @@ std::map<std::string, CPK> GetChildMap(std::string sGSCObjType)
 {
 	std::map<std::string, CPK> mCPKMap;
 	boost::to_upper(sGSCObjType);
+	int i = 0;
 	for (auto ii : mvApplicationCache)
 	{
 		if (Contains(ii.first.first, sGSCObjType))
 		{
 			CPK k = GetCPK(ii.second.first);
-			mCPKMap.insert(std::make_pair(k.sAddress, k));
+			i++;
+			mCPKMap.insert(std::make_pair(k.sAddress + "-" + RoundToString(i, 0), k));
 		}
 	}
 	return mCPKMap;
@@ -772,6 +776,16 @@ bool VoteManyForGobject(std::string govobj, std::string strVoteSignal, std::stri
 	int iVotingLimit, int& nSuccessful, int& nFailed, std::string& sError)
 {
         
+#ifdef ENABLE_WALLET	
+    if (!pwalletMain)	
+    {	
+        sError = "Voting is not supported when wallet is disabled.";	
+        return false;	
+    }	
+#endif
+
+	EnsureWalletIsUnlocked(pwalletMain);
+
 	uint256 hash(uint256S(govobj));
 	vote_signal_enum_t eVoteSignal = CGovernanceVoting::ConvertVoteSignal(strVoteSignal);
 	if(eVoteSignal == VOTE_SIGNAL_NONE) 
@@ -785,77 +799,30 @@ bool VoteManyForGobject(std::string govobj, std::string strVoteSignal, std::stri
         sError = "Invalid vote outcome (yes/no/abstain)";
 		return false;
 	}
-  
-    std::vector<CMasternodeConfig::CMasternodeEntry> entries = masternodeConfig.getEntries();
-
-#ifdef ENABLE_WALLET
-    if (deterministicMNManager->IsDeterministicMNsSporkActive()) 
-	{
-        if (!pwalletMain) 
+	
+	std::map<uint256, CKey> votingKeys;
+	auto mnList = deterministicMNManager->GetListAtChainTip();	
+    mnList.ForEachMN(true, [&](const CDeterministicMNCPtr& dmn) 
+	{	  
+        CKey votingKey;
+		if (pwalletMain->GetKey(dmn->pdmnState->keyIDVoting, votingKey)) 
 		{
-			sError = "Voting is not supported when wallet is disabled.";
-			return false;
+            votingKeys.emplace(dmn->proTxHash, votingKey);			
         }
-        entries.clear();
-        auto mnList = deterministicMNManager->GetListAtChainTip();
-        mnList.ForEachMN(true, [&](const CDeterministicMNCPtr& dmn) 
-		{
-            bool found = false;
-            for (const auto &mne : entries) 
-			{
-                uint256 nTxHash;
-                nTxHash.SetHex(mne.getTxHash());
+    });
 
-                int nOutputIndex = 0;
-                if(!ParseInt32(mne.getOutputIndex(), &nOutputIndex)) {
-                    continue;
-                }
-
-                if (nTxHash == dmn->collateralOutpoint.hash && (uint32_t)nOutputIndex == dmn->collateralOutpoint.n) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                CKey ownerKey;
-                if (pwalletMain->GetKey(dmn->pdmnState->keyIDVoting, ownerKey)) {
-                    CBitcoinSecret secret(ownerKey);
-                    CMasternodeConfig::CMasternodeEntry mne(dmn->proTxHash.ToString(), dmn->pdmnState->addr.ToStringIPPort(false), secret.ToString(), dmn->collateralOutpoint.hash.ToString(), itostr(dmn->collateralOutpoint.n));
-                    entries.push_back(mne);
-                }
-            }
-        });
-    }
-#else
-    if (deterministicMNManager->IsDeterministicMNsSporkActive()) 
-	{
-        sError = "Voting is not supported when wallet is disabled.";
-		return false;
-    }
-#endif
 	UniValue vOutcome;
-    
-	try
-	{
-		vOutcome = VoteWithMasternodeList(entries, hash, eVoteSignal, eVoteOutcome, nSuccessful, nFailed);
-	}
+	try		
+	{	
+	    vOutcome = VoteWithMasternodes(votingKeys, hash, eVoteSignal, eVoteOutcome);
+	}	
 	catch(std::runtime_error& e)
-	{
-		sError = e.what();
+	{		
+		sError = "Voting failed.";	
 		return false;
 	}
-	catch (std::exception& e) 
-	{
-       sError = e.what();
-	   return false;
-    }
-	catch (...) 
-	{
-		sError = "Voting failed.";
-		return false;
-	}
-    
-	bool fResult = nSuccessful > 0 ? true : false;
+	nSuccessful = cdbl(vOutcome["success_count"].getValStr(), 0);	
+ 	bool fResult = nSuccessful > 0 ? true : false;
 	return fResult;
 }
 
@@ -1692,7 +1659,8 @@ void MemorizeBlockChainPrayers(bool fDuringConnectBlock, bool fSubThread, bool f
 			nDeserializedHeight = 0;
 		}
 	}
-	LogPrintf("Memorizing prayers tip height %f @ time %f deserialized height %f ", chainActive.Tip()->nHeight, GetAdjustedTime(), nDeserializedHeight);
+	if (fDebugSpam && fColdBoot && fDebug)
+		LogPrintf("Memorizing prayers tip height %f @ time %f deserialized height %f ", chainActive.Tip()->nHeight, GetAdjustedTime(), nDeserializedHeight);
 
 	int nMaxDepth = chainActive.Tip()->nHeight;
 	int nMinDepth = fDuringConnectBlock ? nMaxDepth - 2 : nMaxDepth - (BLOCKS_PER_DAY * 30 * 12);  // One year
@@ -1739,7 +1707,8 @@ void MemorizeBlockChainPrayers(bool fDuringConnectBlock, bool fSubThread, bool f
 			SerializePrayersToFile(nMaxDepth - 1);
 		}
 	}
-	LogPrintf("...Finished MemorizeBlockChainPrayers @ %f ", GetAdjustedTime());
+	if (fDebugSpam && fDebug && fColdBoot)
+		LogPrintf("...Finished MemorizeBlockChainPrayers @ %f ", GetAdjustedTime());
 }
 
 std::string SignMessageEvo(std::string strAddress, std::string strMessage, std::string& sError)
@@ -1973,7 +1942,8 @@ std::string BiblepayHTTPSPost(bool bPost, int iThreadID, std::string sActionName
 					iMaxSize = dMaxSize + (int)foundPos + 16;
 				}
 			}
-			if ((int)sData.size() >= (iMaxSize-1)) break;
+			if ((int)sData.size() >= (iMaxSize - 1))
+				break;
 		}
 		// R ANDREW - JAN 4 2018: Free bio resources
 		BIO_free_all(bio);

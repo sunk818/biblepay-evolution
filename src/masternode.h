@@ -282,11 +282,6 @@ public:
             return true;
         }
 
-        if(!sporkManager.IsSporkActive(SPORK_14_REQUIRE_SENTINEL_FLAG) &&
-           (nActiveState == MASTERNODE_SENTINEL_PING_EXPIRED)) {
-            return true;
-        }
-	
         return false;
     }
 

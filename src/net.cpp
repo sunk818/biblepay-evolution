@@ -1162,8 +1162,8 @@ void CConnman::AcceptConnection(const ListenSocket& hListenSocket) {
         nInbound--;
     }
 
-    // don't accept incoming connections until fully synced
-    if(fMasternodeMode && !masternodeSync.IsSynced()) {
+    // don't accept incoming connections until fully synced in Prod
+    if(fMasternodeMode && !masternodeSync.IsSynced() && fProd) {
         LogPrint("net", "AcceptConnection -- masternode is not synced yet, skipping inbound connection attempt\n");
         CloseSocket(hSocket);
         return;

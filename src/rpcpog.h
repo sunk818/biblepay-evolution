@@ -72,7 +72,6 @@ CAmount GetDailyMinerEmissions(int nHeight);
 std::string CreateBankrollDenominations(double nQuantity, CAmount denominationAmount, std::string& sError);
 std::string DefaultRecAddress(std::string sType);
 std::string GenerateNewAddress(std::string& sError, std::string sName);
-CAmount SelectCoinsForTithing(const CBlockIndex* pindex);
 CAmount GetTitheTotal(CTransaction tx);
 bool IsTitheLegal(CTransaction ctx, CBlockIndex* pindex, CAmount tithe_amount);
 void GetTxTimeAndAmountAndHeight(uint256 hashInput, int hashInputOrdinal, int64_t& out_nTime, CAmount& out_caAmount, int& out_height);
