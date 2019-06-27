@@ -789,49 +789,43 @@ bool VoteManyForGobject(std::string govobj, std::string strVoteSignal, std::stri
     std::vector<CMasternodeConfig::CMasternodeEntry> entries = masternodeConfig.getEntries();
 
 #ifdef ENABLE_WALLET
-    if (deterministicMNManager->IsDeterministicMNsSporkActive()) 
-	{
-        if (!pwalletMain) 
-		{
-			sError = "Voting is not supported when wallet is disabled.";
-			return false;
-        }
-        entries.clear();
-        auto mnList = deterministicMNManager->GetListAtChainTip();
-        mnList.ForEachMN(true, [&](const CDeterministicMNCPtr& dmn) 
-		{
-            bool found = false;
-            for (const auto &mne : entries) 
-			{
-                uint256 nTxHash;
-                nTxHash.SetHex(mne.getTxHash());
-
-                int nOutputIndex = 0;
-                if(!ParseInt32(mne.getOutputIndex(), &nOutputIndex)) {
-                    continue;
-                }
-
-                if (nTxHash == dmn->collateralOutpoint.hash && (uint32_t)nOutputIndex == dmn->collateralOutpoint.n) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                CKey ownerKey;
-                if (pwalletMain->GetKey(dmn->pdmnState->keyIDVoting, ownerKey)) {
-                    CBitcoinSecret secret(ownerKey);
-                    CMasternodeConfig::CMasternodeEntry mne(dmn->proTxHash.ToString(), dmn->pdmnState->addr.ToStringIPPort(false), secret.ToString(), dmn->collateralOutpoint.hash.ToString(), itostr(dmn->collateralOutpoint.n));
-                    entries.push_back(mne);
-                }
-            }
-        });
-    }
-#else
-    if (deterministicMNManager->IsDeterministicMNsSporkActive()) 
-	{
+    if (!pwalletMain)
+    {
         sError = "Voting is not supported when wallet is disabled.";
-		return false;
+        return false;
     }
+    entries.clear();
+    auto mnList = deterministicMNManager->GetListAtChainTip();
+    mnList.ForEachMN(true, [&](const CDeterministicMNCPtr& dmn)
+    {
+        bool found = false;
+        for (const auto &mne : entries)
+        {
+            uint256 nTxHash;
+            nTxHash.SetHex(mne.getTxHash());
+
+            int nOutputIndex = 0;
+            if(!ParseInt32(mne.getOutputIndex(), &nOutputIndex)) {
+                continue;
+            }
+
+            if (nTxHash == dmn->collateralOutpoint.hash && (uint32_t)nOutputIndex == dmn->collateralOutpoint.n) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            CKey ownerKey;
+            if (pwalletMain->GetKey(dmn->pdmnState->keyIDVoting, ownerKey)) {
+                CBitcoinSecret secret(ownerKey);
+                CMasternodeConfig::CMasternodeEntry mne(dmn->proTxHash.ToString(), dmn->pdmnState->addr.ToStringIPPort(false), secret.ToString(), dmn->collateralOutpoint.hash.ToString(), itostr(dmn->collateralOutpoint.n));
+                entries.push_back(mne);
+            }
+        }
+    });
+#else
+    sError = "Voting is not supported when wallet is disabled.";
+    return false;
 #endif
 	UniValue vOutcome;
     
