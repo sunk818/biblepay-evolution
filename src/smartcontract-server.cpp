@@ -857,7 +857,6 @@ bool SubmitGSCTrigger(std::string sHex, std::string& gobjecthash, std::string& s
 		return false;
 	}
 
-	auto dmn = deterministicMNManager->GetListAtChainTip().GetValidMNByCollateral(activeMasternodeInfo.outpoint);
 
 	uint256 txidFee;
 	uint256 hashParent = uint256();
@@ -876,20 +875,25 @@ bool SubmitGSCTrigger(std::string sHex, std::string& gobjecthash, std::string& s
          << ", txidFee = " << txidFee.GetHex()
          << std::endl; );
 
+	auto mnList = deterministicMNManager->GetListAtChainTip();
+    bool fMnFound = mnList.HasValidMNByCollateral(activeMasternodeInfo.outpoint);
+	if (!fMnFound)
+	{
+		sError = "Unable to find deterministic sanctuary in latest sanctuary list.";
+		return false;
+	}
+
 	if (govobj.GetObjectType() == GOVERNANCE_OBJECT_TRIGGER) 
 	{
-        if (dmn) 
-		{
-            govobj.SetMasternodeOutpoint(activeMasternodeInfo.outpoint);
-            govobj.Sign(*activeMasternodeInfo.blsKeyOperator);
-        }
-		else 
-		{
-            sError = "Object submission rejected because Sanctuary is not running in deterministic mode\n";
-			return false;
-        }
+		govobj.SetMasternodeOutpoint(activeMasternodeInfo.outpoint);
+        govobj.Sign(*activeMasternodeInfo.blsKeyOperator);
     }
-
+    else 
+	{
+        sError = "Object submission rejected because Sanctuary is not running in deterministic mode\n";
+		return false;
+    }
+    
 	std::string strHash = govobj.GetHash().ToString();
 	std::string strError;
 	bool fMissingMasternode;
