@@ -9,7 +9,6 @@
 #include "rpcpodc.h"
 #include "init.h"
 #include "activemasternode.h"
-#include "masternodeman.h"
 #include "governance-classes.h"
 #include "governance.h"
 #include "masternode-sync.h"
