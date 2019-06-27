@@ -9,6 +9,7 @@
 #include "rpcpodc.h"
 #include "init.h"
 #include "activemasternode.h"
+#include "masternodeman.h"
 #include "governance-classes.h"
 #include "governance.h"
 #include "masternode-sync.h"
@@ -46,9 +47,6 @@
 extern CWallet* pwalletMain;
 #endif // ENABLE_WALLET
 
-UniValue VoteWithMasternodes(const std::map<uint256, CKey>& keys,	
-                             const uint256& hash, vote_signal_enum_t eVoteSignal,	
-                             vote_outcome_enum_t eVoteOutcome);
 
 std::string GenerateNewAddress(std::string& sError, std::string sName)
 {
@@ -295,14 +293,12 @@ std::map<std::string, CPK> GetChildMap(std::string sGSCObjType)
 {
 	std::map<std::string, CPK> mCPKMap;
 	boost::to_upper(sGSCObjType);
-	int i = 0;
 	for (auto ii : mvApplicationCache)
 	{
 		if (Contains(ii.first.first, sGSCObjType))
 		{
 			CPK k = GetCPK(ii.second.first);
-			i++;
-			mCPKMap.insert(std::make_pair(k.sAddress + "-" + RoundToString(i, 0), k));
+			mCPKMap.insert(std::make_pair(k.sAddress, k));
 		}
 	}
 	return mCPKMap;
@@ -776,16 +772,6 @@ bool VoteManyForGobject(std::string govobj, std::string strVoteSignal, std::stri
 	int iVotingLimit, int& nSuccessful, int& nFailed, std::string& sError)
 {
         
-#ifdef ENABLE_WALLET	
-    if (!pwalletMain)	
-    {	
-        sError = "Voting is not supported when wallet is disabled.";	
-        return false;	
-    }	
-#endif
-
-	EnsureWalletIsUnlocked(pwalletMain);
-
 	uint256 hash(uint256S(govobj));
 	vote_signal_enum_t eVoteSignal = CGovernanceVoting::ConvertVoteSignal(strVoteSignal);
 	if(eVoteSignal == VOTE_SIGNAL_NONE) 
@@ -799,30 +785,77 @@ bool VoteManyForGobject(std::string govobj, std::string strVoteSignal, std::stri
         sError = "Invalid vote outcome (yes/no/abstain)";
 		return false;
 	}
-	
-	std::map<uint256, CKey> votingKeys;
-	auto mnList = deterministicMNManager->GetListAtChainTip();	
-    mnList.ForEachMN(true, [&](const CDeterministicMNCPtr& dmn) 
-	{	  
-        CKey votingKey;
-		if (pwalletMain->GetKey(dmn->pdmnState->keyIDVoting, votingKey)) 
-		{
-            votingKeys.emplace(dmn->proTxHash, votingKey);			
-        }
-    });
+  
+    std::vector<CMasternodeConfig::CMasternodeEntry> entries = masternodeConfig.getEntries();
 
+#ifdef ENABLE_WALLET
+    if (deterministicMNManager->IsDeterministicMNsSporkActive()) 
+	{
+        if (!pwalletMain) 
+		{
+			sError = "Voting is not supported when wallet is disabled.";
+			return false;
+        }
+        entries.clear();
+        auto mnList = deterministicMNManager->GetListAtChainTip();
+        mnList.ForEachMN(true, [&](const CDeterministicMNCPtr& dmn) 
+		{
+            bool found = false;
+            for (const auto &mne : entries) 
+			{
+                uint256 nTxHash;
+                nTxHash.SetHex(mne.getTxHash());
+
+                int nOutputIndex = 0;
+                if(!ParseInt32(mne.getOutputIndex(), &nOutputIndex)) {
+                    continue;
+                }
+
+                if (nTxHash == dmn->collateralOutpoint.hash && (uint32_t)nOutputIndex == dmn->collateralOutpoint.n) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                CKey ownerKey;
+                if (pwalletMain->GetKey(dmn->pdmnState->keyIDVoting, ownerKey)) {
+                    CBitcoinSecret secret(ownerKey);
+                    CMasternodeConfig::CMasternodeEntry mne(dmn->proTxHash.ToString(), dmn->pdmnState->addr.ToStringIPPort(false), secret.ToString(), dmn->collateralOutpoint.hash.ToString(), itostr(dmn->collateralOutpoint.n));
+                    entries.push_back(mne);
+                }
+            }
+        });
+    }
+#else
+    if (deterministicMNManager->IsDeterministicMNsSporkActive()) 
+	{
+        sError = "Voting is not supported when wallet is disabled.";
+		return false;
+    }
+#endif
 	UniValue vOutcome;
-	try		
-	{	
-	    vOutcome = VoteWithMasternodes(votingKeys, hash, eVoteSignal, eVoteOutcome);
-	}	
+    
+	try
+	{
+		vOutcome = VoteWithMasternodeList(entries, hash, eVoteSignal, eVoteOutcome, nSuccessful, nFailed);
+	}
 	catch(std::runtime_error& e)
-	{		
-		sError = "Voting failed.";	
+	{
+		sError = e.what();
 		return false;
 	}
-	nSuccessful = cdbl(vOutcome["success_count"].getValStr(), 0);	
- 	bool fResult = nSuccessful > 0 ? true : false;
+	catch (std::exception& e) 
+	{
+       sError = e.what();
+	   return false;
+    }
+	catch (...) 
+	{
+		sError = "Voting failed.";
+		return false;
+	}
+    
+	bool fResult = nSuccessful > 0 ? true : false;
 	return fResult;
 }
 
@@ -1659,7 +1692,7 @@ void MemorizeBlockChainPrayers(bool fDuringConnectBlock, bool fSubThread, bool f
 			nDeserializedHeight = 0;
 		}
 	}
-	if (fDebugSpam && fColdBoot && fDebug)
+	if (fDebugSpam && fDebug)
 		LogPrintf("Memorizing prayers tip height %f @ time %f deserialized height %f ", chainActive.Tip()->nHeight, GetAdjustedTime(), nDeserializedHeight);
 
 	int nMaxDepth = chainActive.Tip()->nHeight;
@@ -1707,7 +1740,7 @@ void MemorizeBlockChainPrayers(bool fDuringConnectBlock, bool fSubThread, bool f
 			SerializePrayersToFile(nMaxDepth - 1);
 		}
 	}
-	if (fDebugSpam && fDebug && fColdBoot)
+	if (fDebugSpam && fDebug)
 		LogPrintf("...Finished MemorizeBlockChainPrayers @ %f ", GetAdjustedTime());
 }
 
@@ -1942,8 +1975,7 @@ std::string BiblepayHTTPSPost(bool bPost, int iThreadID, std::string sActionName
 					iMaxSize = dMaxSize + (int)foundPos + 16;
 				}
 			}
-			if ((int)sData.size() >= (iMaxSize - 1))
-				break;
+			if ((int)sData.size() >= (iMaxSize-1)) break;
 		}
 		// R ANDREW - JAN 4 2018: Free bio resources
 		BIO_free_all(bio);
@@ -2299,10 +2331,45 @@ double GetAntiBotNetWeight(int64_t nBlockTime, CTransactionRef tx)
 	return nCoinAge;
 }
 
+static int64_t miABNTime = 0;
+static CWalletTx mtxABN;
+static std::string msABNXML;
+static std::string msABNError;
+static bool mfABNSpent = false;
+static std::mutex cs_abn;
+
+void SpendABN()
+{
+	mfABNSpent = true;
+	miABNTime = 0;
+}
+
+CWalletTx GetAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReserveKey& reservekey, std::string& sXML, std::string& sError)
+{
+	// Share the ABN among all threads, until it's spent or expires
+	int64_t nAge = GetAdjustedTime() - miABNTime;
+	if (nAge > (60 * 10) || mfABNSpent)
+	{
+        std::unique_lock<std::mutex> lock(cs_abn);
+		{
+			mtxABN = CreateAntiBotNetTx(pindexLast, nMinCoinAge, reservekey, sXML, sError);
+			mfABNSpent = false;
+			miABNTime = GetAdjustedTime();
+			msABNXML = sXML;
+			msABNError = sError;
+			return mtxABN;
+		}
+	}
+	else
+	{
+		sXML = msABNXML;
+		sError = msABNError;
+		return mtxABN;
+	}
+}
+
 CWalletTx CreateAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReserveKey& reservekey, std::string& sXML, std::string& sError)
 {
-	LOCK2(cs_main, pwalletMain->cs_wallet);
-	{
 		CWalletTx wtx;
 		CAmount nReqCoins = 0;
 		double nABNWeight = pwalletMain->GetAntiBotNetWalletWeight(0, nReqCoins);
@@ -2315,7 +2382,7 @@ CWalletTx CreateAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReser
 
 		if (pwalletMain->IsLocked() && msEncryptedString.empty())
 		{
-			WriteCache("poolthread0", "poolinfo3", "Unable to create abn tx (wallet locked)", GetAdjustedTime());
+			WriteCache("poolthread0", "poolinfo4", "Unable to create abn tx (wallet locked)", GetAdjustedTime());
 			sError = "Sorry, the wallet must be unlocked to create an anti-botnet transaction.";
 			return wtx;
 		}
@@ -2400,7 +2467,7 @@ CWalletTx CreateAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReser
 			if (fCreated && nTest >= nMinCoinAge)
 			{
 				// Bubble ABN info to user
-				WriteCache("poolthread0", "poolinfo1", sMiningInfo, GetAdjustedTime());
+				WriteCache("poolthread0", "poolinfo4", sMiningInfo, GetAdjustedTime());
 				break;
 			}
 		}
@@ -2413,7 +2480,6 @@ CWalletTx CreateAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReser
 			return wtx;
 		}
 		return wtx;
-	}
 }
 
 double GetABNWeight(const CBlock& block, bool fMining)
