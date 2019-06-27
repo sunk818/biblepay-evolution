@@ -14,7 +14,6 @@
 #include "governance.h"
 #include "masternode-sync.h"
 #include "masternode-payments.h"
-//#include "masternodeconfig.h"
 #include "messagesigner.h"
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string/case_conv.hpp> // for to_lower()
