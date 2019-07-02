@@ -15,7 +15,7 @@
 #include "spork.h"
 #include "util.h"
 #include "validation.h"
-
+#include "rpcpog.h"
 #include "evo/deterministicmns.h"
 
 #include <string>
@@ -168,7 +168,8 @@ bool IsBlockPayeeValid(const CTransaction& txNew, int nBlockHeight, CAmount bloc
 {
     if(fLiteMode) {
         //there is no budget data to use to check anything, let's just accept the longest chain
-        if (fDebugSpam) LogPrintf("%s -- WARNING: Not enough data, skipping block payee checks\n", __func__);
+        if (fDebugSpam)
+			LogPrintf("%s -- WARNING: Not enough data, skipping block payee checks\n", __func__);
         return true;
     }
 
@@ -331,12 +332,18 @@ bool CMasternodePayments::GetMasternodeTxOuts(int nBlockHeight, CAmount blockRew
 
     }
 
-    for (const auto& txout : voutMasternodePaymentsRet) {
+	int i = 0;
+    for (const auto& txout : voutMasternodePaymentsRet) 
+	{
         CTxDestination address1;
         ExtractDestination(txout.scriptPubKey, address1);
         CBitcoinAddress address2(address1);
-		if (fDebugSpam)
-			LogPrintf("CMasternodePayments::%s -- (1) Masternode payment %lld to %s\n", __func__, txout.nValue, address2.ToString());
+		if (fDebug)
+		{
+			LogPrintf("GetMasternodeTxOuts::%s -- (1) Masternode payment #%f amount=%lld,for %f to %s\n", __func__, i, txout.nValue, 
+				(double)txout.nValue/COIN, address2.ToString());
+			i++;
+		}
     }
 
     return true;
@@ -391,6 +398,25 @@ bool CMasternodePayments::IsScheduled(const CDeterministicMNCPtr& dmnIn, int nNo
     return false;
 }
 
+bool IsTxOutEqualToScale(CTxOut tx1, CTxOut tx2, int nScale)
+{
+	// Due to floating point division errors, some split masternode payments may be off by a millionth of a BBP, so we need a special test here
+	CTxDestination dest1;
+	if (!ExtractDestination(tx1.scriptPubKey, dest1))
+		return false;
+	CTxDestination dest2;
+	if (!ExtractDestination(tx2.scriptPubKey, dest2))
+		return false;
+	if (dest1 != dest2)
+		return false;
+	double nAmount1 = cdbl(RoundToString((double)tx1.nValue/COIN, nScale), nScale);
+	double nAmount2 = cdbl(RoundToString((double)tx2.nValue/COIN, nScale), nScale);
+	if (nAmount1 != nAmount2)
+		return false;
+	return true;   
+}
+
+
 bool CMasternodePayments::IsTransactionValid(const CTransaction& txNew, int nBlockHeight, CAmount blockReward) const
 {
     if (!deterministicMNManager->IsDIP3Enforced(nBlockHeight)) {
@@ -404,20 +430,33 @@ bool CMasternodePayments::IsTransactionValid(const CTransaction& txNew, int nBlo
         return true;
     }
 
+	int i = 0;
     for (const auto& txout : voutMasternodePayments) {
         bool found = false;
-        for (const auto& txout2 : txNew.vout) {
-            if (txout == txout2) {
+        for (const auto& txout2 : txNew.vout) 
+		{
+            if (IsTxOutEqualToScale(txout, txout2, 0)) 
+			{
                 found = true;
                 break;
             }
+			if (fDebug)
+			{
+				i++;
+				CTxDestination d1;
+	            if (ExtractDestination(txout2.scriptPubKey, d1))
+				{
+					LogPrintf(" IsTransactionValid::Output #%f, Destination %s, Amount %f, Height %f ", i, CBitcoinAddress(d1).ToString(), (double)txout2.nValue/COIN, nBlockHeight);
+				}
+
+			}
         }
 
         if (!found) {
             CTxDestination dest;
             if (!ExtractDestination(txout.scriptPubKey, dest))
                 assert(false);
-            LogPrintf("CMasternodePayments::%s -- ERROR failed to find expected payee %s in block at height %s\n", __func__, CBitcoinAddress(dest).ToString(), nBlockHeight);
+            LogPrintf("CMasternodePayments::%s -- ERROR failed to find expected payee %s with amount of %f in block at height %s\n", __func__, CBitcoinAddress(dest).ToString(), (double)txout.nValue/COIN, nBlockHeight);
             return false;
         }
     }

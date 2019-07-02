@@ -2115,6 +2115,8 @@ double CWallet::GetAntiBotNetWalletWeight(double nMinCoinAge, CAmount& nTotalReq
 	nTotalRequired = 0;
 	std::string sCache;
 	double nFoundCoinAge = 0;
+	int iConsumed = 0;
+	int CONSUMPTION_THRESHHOLD = 500; // Don't use more than 500 inputs as this will exceed the tx size limit
     for (std::map<uint256, CWalletTx>::const_iterator it = mapWallet.begin(); it != mapWallet.end(); ++it)
     {
         const CWalletTx* pcoin = &(*it).second;
@@ -2124,6 +2126,9 @@ double CWallet::GetAntiBotNetWalletWeight(double nMinCoinAge, CAmount& nTotalReq
 			continue;
 
 		if (pcoin->IsCoinBase() && pcoin->GetBlocksToMaturity() > 0)
+			continue;
+
+		if (iConsumed > CONSUMPTION_THRESHHOLD)
 			continue;
 
 		int nDepth = pcoin->GetDepthInMainChain();
@@ -2154,6 +2159,7 @@ double CWallet::GetAntiBotNetWalletWeight(double nMinCoinAge, CAmount& nTotalReq
 							nFoundCoinAge += nWeight;
 							std::string sData = RoundToString((double)nAmount/COIN, 4) + "(" + RoundToString(nAge, 2) + ")=[" + RoundToString(nWeight, 2) + "] depth=" + RoundToString(nDepth, 0) +", ";
 							sCache += sData + "         \n";
+							iConsumed++;
 						}
 					}
 				}

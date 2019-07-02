@@ -1353,8 +1353,10 @@ void CConnman::ThreadSocketHandler()
 
 #ifndef WIN32
         // drain the wakeup pipe
-        if (FD_ISSET(wakeupPipe[0], &fdsetRecv)) {
-            LogPrint("net", "woke up select()\n");
+        if (FD_ISSET(wakeupPipe[0], &fdsetRecv)) 
+		{
+			if (fDebugSpam)
+				LogPrint("net", "woke up select()\n");
             char buf[128];
             while (true) {
                 int r = read(wakeupPipe[0], buf, sizeof(buf));
@@ -1528,7 +1530,8 @@ void CConnman::WakeSelect()
         return;
     }
 
-    LogPrint("net", "waking up select()\n");
+	if (fDebugSpam)
+		LogPrint("net", "waking up select()\n");
 
     char buf[1];
     if (write(wakeupPipe[1], buf, 1) != 1) {

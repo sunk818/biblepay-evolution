@@ -1791,7 +1791,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         if (vAddr.size() > 1000)
         {
             LOCK(cs_main);
-            Misbehaving(pfrom->GetId(), 20);
+            Misbehaving(pfrom->GetId(), 23);
             return error("message addr size() = %u", vAddr.size());
         }
 
@@ -1869,7 +1869,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         if (vInv.size() > MAX_INV_SZ)
         {
             LOCK(cs_main);
-            Misbehaving(pfrom->GetId(), 20);
+            Misbehaving(pfrom->GetId(), 24);
             return error("message inv size() = %u", vInv.size());
         }
 
@@ -1971,7 +1971,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         if (vInv.size() > MAX_INV_SZ)
         {
             LOCK(cs_main);
-            Misbehaving(pfrom->GetId(), 20);
+            Misbehaving(pfrom->GetId(), 19);
             return error("message getdata size() = %u", vInv.size());
         }
 
@@ -2695,7 +2695,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         unsigned int nCount = ReadCompactSize(vRecv);
         if (nCount > MAX_HEADERS_RESULTS) {
             LOCK(cs_main);
-            Misbehaving(pfrom->GetId(), 20);
+            Misbehaving(pfrom->GetId(), 18);
             return error("headers message size = %u", nCount);
         }
         headers.resize(nCount);
@@ -2736,7 +2736,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             UpdateBlockAvailability(pfrom->GetId(), headers.back().GetHash());
 
             if (nodestate->nUnconnectingHeaders % MAX_UNCONNECTING_HEADERS == 0) {
-                Misbehaving(pfrom->GetId(), 20);
+                Misbehaving(pfrom->GetId(), 17);
             }
             return true;
         }
@@ -2744,7 +2744,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         uint256 hashLastBlock;
         for (const CBlockHeader& header : headers) {
             if (!hashLastBlock.IsNull() && header.hashPrevBlock != hashLastBlock) {
-                Misbehaving(pfrom->GetId(), 20);
+                Misbehaving(pfrom->GetId(), 21);
                 return error("non-continuous headers sequence");
             }
             hashLastBlock = header.GetHash();

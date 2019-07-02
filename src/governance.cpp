@@ -207,10 +207,11 @@ void CGovernanceManager::ProcessMessage(CNode* pfrom, const std::string& strComm
             } else if (fMissingConfirmations) {
                 AddPostponedObject(govobj);
                 LogPrintf("MNGOVERNANCEOBJECT -- Not enough fee confirmations for: %s, strError = %s\n", strHash, strError);
-            } else {
+            } else 
+			{
                 LogPrintf("MNGOVERNANCEOBJECT -- Governance object is invalid - %s\n", strError);
                 // apply node's ban score
-                Misbehaving(pfrom->GetId(), 20);
+				Misbehaving(pfrom->GetId(), fProd ? 15 : 1);
             }
 
             return;

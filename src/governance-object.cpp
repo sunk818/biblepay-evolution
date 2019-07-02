@@ -150,7 +150,7 @@ bool CGovernanceObject::ProcessVote(CNode* pfrom,
         std::ostringstream ostr;
         ostr << "CGovernanceObject::ProcessVote -- Unsupported vote signal: " << CGovernanceVoting::ConvertSignalToString(vote.GetSignal());
         LogPrintf("%s\n", ostr.str());
-        exception = CGovernanceException(ostr.str(), GOVERNANCE_EXCEPTION_PERMANENT_ERROR, 20);
+        exception = CGovernanceException(ostr.str(), GOVERNANCE_EXCEPTION_PERMANENT_ERROR, 15);
         return false;
     }
     vote_instance_m_it it2 = voteRecordRef.mapInstances.emplace(vote_instance_m_t::value_type(int(eSignal), vote_instance_t())).first;
@@ -208,7 +208,7 @@ bool CGovernanceObject::ProcessVote(CNode* pfrom,
              << ", governance object hash = " << GetHash().ToString()
              << ", vote hash = " << vote.GetHash().ToString();
         LogPrintf("%s\n", ostr.str());
-        exception = CGovernanceException(ostr.str(), GOVERNANCE_EXCEPTION_PERMANENT_ERROR, 20);
+        exception = CGovernanceException(ostr.str(), GOVERNANCE_EXCEPTION_PERMANENT_ERROR, 13);
         governance.AddInvalidVote(vote);
         return false;
     }
