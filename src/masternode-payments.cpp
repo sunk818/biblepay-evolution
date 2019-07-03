@@ -435,7 +435,7 @@ bool CMasternodePayments::IsTransactionValid(const CTransaction& txNew, int nBlo
         bool found = false;
         for (const auto& txout2 : txNew.vout) 
 		{
-            if (IsTxOutEqualToScale(txout, txout2, 0)) 
+            if (txout == txout2) 
 			{
                 found = true;
                 break;

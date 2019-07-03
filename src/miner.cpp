@@ -197,7 +197,9 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
 		if (sError1.empty() && wtxABN.tx != NULL)
 		{
 			pblock->vtx.emplace_back(wtxABN.tx);
-			pblocktemplate->vTxFees.emplace_back(0);
+			CAmount nABNFees = GetFees(wtxABN.tx);
+			nFees += nABNFees;
+			pblocktemplate->vTxFees.emplace_back(nABNFees);
 			pblocktemplate->vTxSigOps.emplace_back(0);
 			nBlockSize += wtxABN.tx->GetTotalSize();
 			++nBlockTx;

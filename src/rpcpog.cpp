@@ -2269,6 +2269,33 @@ bool CheckAntiBotNetSignature(CTransactionRef tx, std::string sType)
 	return false;
 }
 
+double GetFees(CTransactionRef tx)
+{
+	CAmount nFees = 0;
+	CAmount nValueIn = 0;
+	CAmount nValueOut = 0;
+	for (int i = 0; i < (int)tx->vin.size(); i++) 
+	{
+    	int n = tx->vin[i].prevout.n;
+		CAmount nAmount = 0;
+		int64_t nTime = 0;
+		bool fOK = GetTransactionTimeAndAmount(tx->vin[i].prevout.hash, n, nTime, nAmount);
+		if (fOK && nTime > 0 && nAmount > 0)
+		{
+			nValueIn += nAmount;
+		}
+	}
+	for (int i = 0; i < (int)tx->vout.size(); i++)
+	{
+		nValueOut += tx->vout[i].nValue;
+	}
+	nFees = nValueIn - nValueOut;
+	if (fDebug)
+		LogPrintf("GetFees::ValueIn %f, ValueOut %f, nFees %f ", (double)nValueIn/COIN, (double)nValueOut/COIN, (double)nFees/COIN);
+	return nFees;
+}
+
+
 double GetVINCoinAge(int64_t nBlockTime, CTransactionRef tx)
 {
 	double dTotal = 0;

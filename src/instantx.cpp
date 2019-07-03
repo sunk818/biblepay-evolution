@@ -990,7 +990,7 @@ bool CTxLockRequest::IsValid() const
 
     int nInstantSendConfirmationsRequired = Params().GetConsensus().nInstantSendConfirmationsRequired;
 
-    for (const auto& txin : tx->vin) {
+	for (const auto& txin : tx->vin) {
 
         Coin coin;
 
