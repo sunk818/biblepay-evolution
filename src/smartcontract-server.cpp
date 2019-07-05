@@ -515,33 +515,23 @@ std::string AssessBlocks(int nHeight, bool fCreatingContract)
 					{
 						std::string sDiary = ExtractXML(block.vtx[n]->GetTxMessage(), "<diary>","</diary>");
 						double nPoints = CalculatePoints(sCampaignName, sDiary, nCoinAge, nDonation, sCPK);
+						if (sCampaignName == "CAMEROON-ONE" && mCPKCampaignPoints[sCPK + sCampaignName].nPoints > 0)
+							nPoints = 0;
 						if (nPoints > 0)
 						{
 							// CPK 
 							CPK c = mPoints[sCPK];
-							c.nPoints += nPoints;
 							c.sCampaign = sCampaignName;
 							c.sAddress = sCPK;
 							c.sNickName = localCPK.sNickName;
+							c.nPoints += nPoints;
+							mCampaignPoints[sCampaignName] += nPoints;
 							mPoints[sCPK] = c;
-							CPK cCPKCampaignPoints = mCPKCampaignPoints[sCPK + sCampaignName];
 							
-							// Campaign Points
-							if (c.sCampaign != "CAMEROON-ONE")
-							{
-								mCampaignPoints[sCampaignName] += nPoints;
-							}
-							else if (c.sCampaign == "CAMEROON-ONE" && cCPKCampaignPoints.nPoints == 0)
-							{
-								mCampaignPoints[sCampaignName] += nPoints;
-							}
 							// CPK-Campaign
+							CPK cCPKCampaignPoints = mCPKCampaignPoints[sCPK + sCampaignName];
 							cCPKCampaignPoints.sAddress = sCPK;
 							cCPKCampaignPoints.sNickName = c.sNickName;
-							if (c.sCampaign == "CAMEROON-ONE")
-							{
-								cCPKCampaignPoints.nPoints = 0;  // CPK only gets credit once per day per orphan
-							}
 							cCPKCampaignPoints.nPoints += nPoints;
 							mCPKCampaignPoints[sCPK + sCampaignName] = cCPKCampaignPoints;
 							if (dDebugLevel == 1)

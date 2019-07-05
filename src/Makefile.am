@@ -161,6 +161,8 @@ BITCOIN_CORE_H = \
   kjv.h \
   rpcpog.h \
   rpcpodc.h \
+  bbpsocket.h \
+  pose.h \
   smartcontract-client.h \
   smartcontract-server.h \
   init.h \
@@ -285,6 +287,8 @@ libbiblepay_server_a_SOURCES = \
   kjv.cpp \
   rpcpog.cpp \
   rpcpodc.cpp \
+  bbpsocket.cpp \
+  pose.cpp \
   smartcontract-client.cpp \
   smartcontract-server.cpp \
   init.cpp \

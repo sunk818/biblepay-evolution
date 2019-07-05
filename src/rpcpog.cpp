@@ -8,6 +8,7 @@
 #include "utilmoneystr.h"
 #include "rpcpodc.h"
 #include "init.h"
+#include "bbpsocket.h"
 #include "activemasternode.h"
 #include "governance-classes.h"
 #include "governance.h"
@@ -1848,24 +1849,6 @@ bool TermPeekFound(std::string sData, int iBOEType)
 	return bFound;
 }
 
-std::string PrepareHTTPPost(bool bPost, std::string sPage, std::string sHostHeader, const std::string& sMsg, const std::map<std::string,std::string>& mapRequestHeaders)
-{
-	std::ostringstream s;
-	std::string sUserAgent = "Mozilla/5.0";
-	std::string sMethod = bPost ? "POST" : "GET";
-
-	s << sMethod + " /" + sPage + " HTTP/1.1\r\n"
-		<< "User-Agent: " + sUserAgent + "/" << FormatFullVersion() << "\r\n"
-		<< "Host: " + sHostHeader + "" << "\r\n"
-		<< "Content-Length: " << sMsg.size() << "\r\n";
-
-	for (auto item : mapRequestHeaders) 
-	{
-        s << item.first << ": " << item.second << "\r\n";
-	}
-    s << "\r\n" << sMsg;
-    return s.str();
-}
 
 std::string BiblepayHTTPSPost(bool bPost, int iThreadID, std::string sActionName, std::string sDistinctUser, std::string sPayload, std::string sBaseURL, std::string sPage, int iPort, 
 	std::string sSolution, int iTimeoutSecs, int iMaxSize, int iBOE)

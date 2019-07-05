@@ -150,7 +150,7 @@ UniValue getpeerinfo(const JSONRPCRequest& request)
         if (stats.dPingWait > 0.0)
             obj.push_back(Pair("pingwait", stats.dPingWait));
         obj.push_back(Pair("version", stats.nVersion));
-        // Use the sanitized form of subver here, to avoid tricksy remote peers from
+        // Use the sanitized form of subver here, to avoid tricky remote peers from
         // corrupting or modifying the JSON output by putting special characters in
         // their ver message.
         obj.push_back(Pair("subver", stats.cleanSubVer));

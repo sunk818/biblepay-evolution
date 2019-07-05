@@ -20,6 +20,7 @@
 #include "sync.h"
 #include "versionbits.h"
 #include "spentindex.h"
+#include "pose.h"
 
 #include <algorithm>
 #include <exception>
@@ -251,6 +252,10 @@ extern bool fLargeWorkInvalidChainFound;
 
 extern std::map<uint256, int64_t> mapRejectedBlocks;
 extern std::map<std::pair<std::string, std::string>, std::pair<std::string, int64_t>> mvApplicationCache;
+
+struct POSEScore;
+
+extern std::map<std::string, POSEScore> mvPOSEScore;
 extern std::atomic<bool> fDIP0001ActiveAtTip;
 
 /** Block hash whose ancestors we will assume to have valid scripts without checking them. */

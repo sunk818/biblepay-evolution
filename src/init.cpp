@@ -70,8 +70,8 @@
 
 #include "evo/deterministicmns.h"
 #include "llmq/quorums_init.h"
-
 #include "llmq/quorums_init.h"
+#include "pose.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -99,6 +99,7 @@
 #endif
 
 extern void ThreadSendAlert(CConnman& connman);
+extern void ThreadPOSE(CConnman& connman);
 
 bool fFeeEstimatesInitialized = false;
 static const bool DEFAULT_PROXYRANDOMIZE = true;
@@ -2199,6 +2200,7 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
 #endif
 
     threadGroup.create_thread(boost::bind(&ThreadSendAlert, boost::ref(connman)));
+	threadGroup.create_thread(boost::bind(&ThreadPOSE, boost::ref(connman)));
 
     return !fRequestShutdown;
 }

@@ -35,6 +35,8 @@
 #include "masternode-sync.h"
 #include "llmq/quorums_chainlocks.h"	
 #include "llmq/quorums_instantsend.h"
+#include "bbpsocket.h"
+
 #include <stdint.h>
 
 #include <univalue.h>
@@ -1396,8 +1398,14 @@ UniValue getblockchaininfo(const JSONRPCRequest& request)
     softforks.push_back(SoftForkDesc("bip34", 2, tip, consensusParams));
     softforks.push_back(SoftForkDesc("bip66", 3, tip, consensusParams));
     softforks.push_back(SoftForkDesc("bip65", 4, tip, consensusParams));
-    BIP9SoftForkDescPushBack(bip9_softforks, "csv", consensusParams, Consensus::DEPLOYMENT_CSV);
+	/*
+	DEPLOYMENT_CSV is a blockchain vote to store the <median time past> int64_t unixtime in the block.tx.nLockTime field.  Since the bitcoin behavior is to store the height, and we have pre-existing business logic that calculates height delta from this field, we don't want to switch to THRESHOLD_ACTIVE here.  Additionally, BiblePay enforces the allowable mining window (for block timestamps) to be within a 15 minute range.
+	If we ever want to enable DEPLOYMENT_CSV, we need to change the chainparam deployment window to be the future, and check the POG business logic for height delta calculations.
+	BIP9SoftForkDescPushBack(bip9_softforks, "csv", consensusParams, Consensus::DEPLOYMENT_CSV);
+	DIP0001 is a vote to allow up to 2MB blocks.  BiblePay moved to 2MB blocks before DIP1 and therefore our vote never started, but our code uses the 2MB hardcoded literal (matching dash).  So we want to comment out this DIP1 versionbits response as it does not reflect our environment.
     BIP9SoftForkDescPushBack(bip9_softforks, "dip0001", consensusParams, Consensus::DEPLOYMENT_DIP0001);
+    */
+
     BIP9SoftForkDescPushBack(bip9_softforks, "dip0003", consensusParams, Consensus::DEPLOYMENT_DIP0003);
     BIP9SoftForkDescPushBack(bip9_softforks, "bip147", consensusParams, Consensus::DEPLOYMENT_BIP147);
     obj.push_back(Pair("softforks",             softforks));
@@ -1961,6 +1969,12 @@ UniValue exec(const JSONRPCRequest& request)
 	else if (sItem == "ipfstest1")
 	{
 		std::string sResult = BiblePayHTTPSPost2(true, "5001", "192.168.0.153", "BiblePayGui/Welcome", "na", "gear.png");
+		results.push_back(Pair("result", sResult));
+	}
+	else if (sItem == "ipfstest2")
+	{
+		std::string sResult = BBPPost("pool.biblepay.org", "80", "Action.aspx?action=ipfs", "payload", 10);
+		sResult = BBPPost("dns1.biblepay.org", "40001", "Action.aspx?action=ipfs", "payload", 10);
 		results.push_back(Pair("result", sResult));
 	}
 	else if (sItem == "testgscvote")

@@ -114,6 +114,7 @@ std::map<uint256, int64_t> mapRejectedBlocks GUARDED_BY(cs_main);
 
 // BIBLEPAY
 std::map<std::pair<std::string, std::string>, std::pair<std::string, int64_t>> mvApplicationCache;
+std::map<std::string, POSEScore> mvPOSEScore;
 std::string msGithubVersion;
 std::string sOS;
 int PRAYER_MODULUS = 0;

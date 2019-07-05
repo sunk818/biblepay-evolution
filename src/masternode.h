@@ -255,6 +255,8 @@ public:
     bool IsUpdateRequired() const { return nActiveState == MASTERNODE_UPDATE_REQUIRED; }
     bool IsSentinelPingExpired() const { return nActiveState == MASTERNODE_SENTINEL_PING_EXPIRED; }
     bool IsNewStartRequired() const { return nActiveState == MASTERNODE_NEW_START_REQUIRED; }
+	const static double POSE_BAN_THRESHHOLD = .49;
+	const static int POSE_BAN_MIN_TRIES = 3;
 
     static bool IsValidStateForAutoStart(int nActiveStateIn)
     {
@@ -278,7 +280,17 @@ public:
 			}
 		}
 
-        if(nActiveState == MASTERNODE_ENABLED) {
+		POSEScore p = GetPOSEScore(addr.ToString());
+		if (p.nTries > POSE_BAN_MIN_TRIES && p.nScore < POSE_BAN_THRESHHOLD && nActiveState != MASTERNODE_POSE_BAN)
+		{
+			// Watchman-on-the-wall Ping Status - Expired
+			LogPrintf("\nWatchman on the wall calling for %s at %f", "MASTERNODE_POSE_BAN", GetAdjustedTime());
+			nActiveState = MASTERNODE_POSE_BAN;
+			return false;
+		}
+
+        if(nActiveState == MASTERNODE_ENABLED) 
+		{
             return true;
         }
 
