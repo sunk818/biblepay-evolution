@@ -8,12 +8,13 @@
 #include "utilmoneystr.h"
 #include "rpcpodc.h"
 #include "init.h"
-#include "bbpsocket.h"
 #include "activemasternode.h"
+#include "masternodeman.h"
 #include "governance-classes.h"
 #include "governance.h"
 #include "masternode-sync.h"
 #include "masternode-payments.h"
+#include "masternodeconfig.h"
 #include "messagesigner.h"
 #include "smartcontract-server.h"
 #include "smartcontract-client.h"
@@ -45,10 +46,6 @@
 #ifdef ENABLE_WALLET
 extern CWallet* pwalletMain;
 #endif // ENABLE_WALLET
-
-UniValue VoteWithMasternodes(const std::map<uint256, CKey>& keys,
-                             const uint256& hash, vote_signal_enum_t eVoteSignal,
-                             vote_outcome_enum_t eVoteOutcome);
 
 
 std::string GenerateNewAddress(std::string& sError, std::string sName)
@@ -296,14 +293,12 @@ std::map<std::string, CPK> GetChildMap(std::string sGSCObjType)
 {
 	std::map<std::string, CPK> mCPKMap;
 	boost::to_upper(sGSCObjType);
-	int i = 0;
 	for (auto ii : mvApplicationCache)
 	{
 		if (Contains(ii.first.first, sGSCObjType))
 		{
 			CPK k = GetCPK(ii.second.first);
-			i++;
-			mCPKMap.insert(std::make_pair(k.sAddress + "-" + RoundToString(i, 0), k));
+			mCPKMap.insert(std::make_pair(k.sAddress, k));
 		}
 	}
 	return mCPKMap;
@@ -791,31 +786,58 @@ bool VoteManyForGobject(std::string govobj, std::string strVoteSignal, std::stri
 		return false;
 	}
   
-    
+    std::vector<CMasternodeConfig::CMasternodeEntry> entries = masternodeConfig.getEntries();
+
 #ifdef ENABLE_WALLET
-    if (!pwalletMain)
-    {
+    if (deterministicMNManager->IsDeterministicMNsSporkActive()) 
+	{
+        if (!pwalletMain) 
+		{
+			sError = "Voting is not supported when wallet is disabled.";
+			return false;
+        }
+        entries.clear();
+        auto mnList = deterministicMNManager->GetListAtChainTip();
+        mnList.ForEachMN(true, [&](const CDeterministicMNCPtr& dmn) 
+		{
+            bool found = false;
+            for (const auto &mne : entries) 
+			{
+                uint256 nTxHash;
+                nTxHash.SetHex(mne.getTxHash());
+
+                int nOutputIndex = 0;
+                if(!ParseInt32(mne.getOutputIndex(), &nOutputIndex)) {
+                    continue;
+                }
+
+                if (nTxHash == dmn->collateralOutpoint.hash && (uint32_t)nOutputIndex == dmn->collateralOutpoint.n) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                CKey ownerKey;
+                if (pwalletMain->GetKey(dmn->pdmnState->keyIDVoting, ownerKey)) {
+                    CBitcoinSecret secret(ownerKey);
+                    CMasternodeConfig::CMasternodeEntry mne(dmn->proTxHash.ToString(), dmn->pdmnState->addr.ToStringIPPort(false), secret.ToString(), dmn->collateralOutpoint.hash.ToString(), itostr(dmn->collateralOutpoint.n));
+                    entries.push_back(mne);
+                }
+            }
+        });
+    }
+#else
+    if (deterministicMNManager->IsDeterministicMNsSporkActive()) 
+	{
         sError = "Voting is not supported when wallet is disabled.";
-        return false;
+		return false;
     }
 #endif
-
-    std::map<uint256, CKey> votingKeys;
-
-    auto mnList = deterministicMNManager->GetListAtChainTip();
-    mnList.ForEachMN(true, [&](const CDeterministicMNCPtr& dmn) {
-        CKey votingKey;
-        if (pwalletMain->GetKey(dmn->pdmnState->keyIDVoting, votingKey)) {
-            votingKeys.emplace(dmn->proTxHash, votingKey);
-        }
-    });
-
-
- 	UniValue vOutcome;
+	UniValue vOutcome;
     
 	try
 	{
-		vOutcome = VoteWithMasternodes(votingKeys, hash, eVoteSignal, eVoteOutcome);
+		vOutcome = VoteWithMasternodeList(entries, hash, eVoteSignal, eVoteOutcome, nSuccessful, nFailed);
 	}
 	catch(std::runtime_error& e)
 	{
@@ -833,7 +855,6 @@ bool VoteManyForGobject(std::string govobj, std::string strVoteSignal, std::stri
 		return false;
 	}
     
-	nSuccessful = cdbl(vOutcome["success_count"].getValStr(), 0);
 	bool fResult = nSuccessful > 0 ? true : false;
 	return fResult;
 }
@@ -1849,6 +1870,24 @@ bool TermPeekFound(std::string sData, int iBOEType)
 	return bFound;
 }
 
+std::string PrepareHTTPPost(bool bPost, std::string sPage, std::string sHostHeader, const std::string& sMsg, const std::map<std::string,std::string>& mapRequestHeaders)
+{
+	std::ostringstream s;
+	std::string sUserAgent = "Mozilla/5.0";
+	std::string sMethod = bPost ? "POST" : "GET";
+
+	s << sMethod + " /" + sPage + " HTTP/1.1\r\n"
+		<< "User-Agent: " + sUserAgent + "/" << FormatFullVersion() << "\r\n"
+		<< "Host: " + sHostHeader + "" << "\r\n"
+		<< "Content-Length: " << sMsg.size() << "\r\n";
+
+	for (auto item : mapRequestHeaders) 
+	{
+        s << item.first << ": " << item.second << "\r\n";
+	}
+    s << "\r\n" << sMsg;
+    return s.str();
+}
 
 std::string BiblepayHTTPSPost(bool bPost, int iThreadID, std::string sActionName, std::string sDistinctUser, std::string sPayload, std::string sBaseURL, std::string sPage, int iPort, 
 	std::string sSolution, int iTimeoutSecs, int iMaxSize, int iBOE)
@@ -2235,11 +2274,22 @@ std::string GetTransactionMessage(CTransactionRef tx)
 	return sMsg;
 }
 
-bool CheckAntiBotNetSignature(CTransactionRef tx, std::string sType)
+bool CheckAntiBotNetSignature(CTransactionRef tx, std::string sType, std::string sSolver)
 {
 	std::string sXML = GetTransactionMessage(tx);
 	std::string sSig = ExtractXML(sXML, "<" + sType + "sig>", "</" + sType + "sig>");
 	std::string sMessage = ExtractXML(sXML, "<abnmsg>", "</abnmsg>");
+	std::string sPPK = ExtractXML(sMessage, "<ppk>", "</ppk>");
+	double dCheckPoolSigs = GetSporkDouble("checkpoolsigs", 0);
+
+	if (!sSolver.empty() && !sPPK.empty() && dCheckPoolSigs == 1)
+	{
+		if (sSolver != sPPK)
+		{
+			LogPrintf("CheckAntiBotNetSignature::Pool public key != solver public key, signature %s \n", "rejected");
+			return false;
+		}
+	}
 	for (unsigned int i = 0; i < tx->vout.size(); i++)
 	{
 		const CTxOut& txout = tx->vout[i];
@@ -2252,36 +2302,10 @@ bool CheckAntiBotNetSignature(CTransactionRef tx, std::string sType)
 	return false;
 }
 
-double GetFees(CTransactionRef tx)
-{
-	CAmount nFees = 0;
-	CAmount nValueIn = 0;
-	CAmount nValueOut = 0;
-	for (int i = 0; i < (int)tx->vin.size(); i++) 
-	{
-    	int n = tx->vin[i].prevout.n;
-		CAmount nAmount = 0;
-		int64_t nTime = 0;
-		bool fOK = GetTransactionTimeAndAmount(tx->vin[i].prevout.hash, n, nTime, nAmount);
-		if (fOK && nTime > 0 && nAmount > 0)
-		{
-			nValueIn += nAmount;
-		}
-	}
-	for (int i = 0; i < (int)tx->vout.size(); i++)
-	{
-		nValueOut += tx->vout[i].nValue;
-	}
-	nFees = nValueIn - nValueOut;
-	if (fDebug)
-		LogPrintf("GetFees::ValueIn %f, ValueOut %f, nFees %f ", (double)nValueIn/COIN, (double)nValueOut/COIN, (double)nFees/COIN);
-	return nFees;
-}
-
-
-double GetVINCoinAge(int64_t nBlockTime, CTransactionRef tx)
+double GetVINCoinAge(int64_t nBlockTime, CTransactionRef tx, bool fDebug)
 {
 	double dTotal = 0;
+	std::string sDebugData = "\nGetVINCoinAge: ";
 	for (int i = 0; i < (int)tx->vin.size(); i++) 
 	{
     	int n = tx->vin[i].prevout.n;
@@ -2301,15 +2325,20 @@ double GetVINCoinAge(int64_t nBlockTime, CTransactionRef tx)
 			if (nAge < 0)   nAge = 0;
 			double dWeight = nAge * (nAmount / COIN);
 			dTotal += dWeight;
+			if (fDebug)
+				sDebugData += "Output #" + RoundToString(i, 0) + ", Weight: " + RoundToString(dWeight, 2) + ", Age: " + RoundToString(nAge, 2) + ", Amount: " + RoundToString(nAmount / COIN, 2) 
+				+ ", TxTime: " + RoundToString(nTime, 0) + "...";
 		}
 	}
+	if (fDebug)
+		WriteCache("vin", "coinage", sDebugData, GetAdjustedTime());
 	return dTotal;
 }
 
-double GetAntiBotNetWeight(int64_t nBlockTime, CTransactionRef tx)
+double GetAntiBotNetWeight(int64_t nBlockTime, CTransactionRef tx, bool fDebug, std::string sSolver)
 {
-	double nCoinAge = GetVINCoinAge(nBlockTime, tx);
-	bool fSigned = CheckAntiBotNetSignature(tx, "abn");
+	double nCoinAge = GetVINCoinAge(nBlockTime, tx, fDebug);
+	bool fSigned = CheckAntiBotNetSignature(tx, "abn", sSolver);
 	if (!fSigned) 
 	{
 		if (fDebugSpam && fDebug && nCoinAge > 0)
@@ -2332,7 +2361,7 @@ void SpendABN()
 	miABNTime = 0;
 }
 
-CWalletTx GetAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReserveKey& reservekey, std::string& sXML, std::string& sError)
+CWalletTx GetAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReserveKey& reservekey, std::string& sXML, std::string sPoolMiningPublicKey, std::string& sError)
 {
 	// Share the ABN among all threads, until it's spent or expires
 	int64_t nAge = GetAdjustedTime() - miABNTime;
@@ -2340,7 +2369,7 @@ CWalletTx GetAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReserveK
 	{
         std::unique_lock<std::mutex> lock(cs_abn);
 		{
-			mtxABN = CreateAntiBotNetTx(pindexLast, nMinCoinAge, reservekey, sXML, sError);
+			mtxABN = CreateAntiBotNetTx(pindexLast, nMinCoinAge, reservekey, sXML, sPoolMiningPublicKey, sError);
 			mfABNSpent = false;
 			miABNTime = GetAdjustedTime();
 			msABNXML = sXML;
@@ -2356,7 +2385,7 @@ CWalletTx GetAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReserveK
 	}
 }
 
-CWalletTx CreateAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReserveKey& reservekey, std::string& sXML, std::string& sError)
+CWalletTx CreateAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReserveKey& reservekey, std::string& sXML, std::string sPoolMiningPublicKey, std::string& sError)
 {
 		CWalletTx wtx;
 		CAmount nReqCoins = 0;
@@ -2384,7 +2413,7 @@ CWalletTx CreateAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReser
 		{
 			LogPrintf("\nCreateAntiBotNetTx::Wallet Total Bal %f (>6 confirms), Needed %f (>5 confirms), ABNWeight %f ", 
 				(double)nBalance/COIN, (double)nReqCoins/COIN, nABNWeight);
-			sError = "Sorry, your balance is lower than the required ABN transaction amount when seeking coins aged > 5 confirms deep.";
+			sError = "Sorry, your balance of " + RoundToString(nBalance/COIN, 2) + " is lower than the required ABN transaction amount of " + RoundToString(nReqCoins/COIN, 2) + " when seeking coins aged > 5 confirms deep.";
 			return wtx;
 		}
 		if (nReqCoins < (1 * COIN))
@@ -2412,6 +2441,10 @@ CWalletTx CreateAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReser
 		CBitcoinAddress baCPKAddress(sCPK);
 		CScript spkCPKScript = GetScriptForDestination(baCPKAddress.Get());
 		std::string sMessage = GetRandHash().GetHex();
+		if (!sPoolMiningPublicKey.empty())
+		{
+			sMessage = "<nonce>" + GetRandHash().GetHex() + "</nonce><ppk>" + sPoolMiningPublicKey + "</ppk>";
+		}
 		sXML += "<MT>ABN</MT><abnmsg>" + sMessage + "</abnmsg>";
 		std::string sSignature;
 		std::string strError;
@@ -2425,41 +2458,32 @@ CWalletTx CreateAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReser
 		}
 		sXML += "<abnsig>" + sSignature + "</abnsig><abncpk>" + sCPK + "</abncpk><abnwgt>" + RoundToString(nMinCoinAge, 0) + "</abnwgt>";
 		bool fCreated = false;		
-		// Feedback Loop here ensures we successfully create a good ABN that other miners will not disagree with:
-		int MAX_FEEDBACK_ITERATIONS = 25;
-		double INCREMENTOR = .10;
 		std::string sDebugInfo;
 		std::string sMiningInfo;
 		CAmount nUsed = 0;
 		double nTargetABNWeight = pwalletMain->GetAntiBotNetWalletWeight(nMinCoinAge, nUsed);
 		int nChangePosRet = -1;
 		bool fSubtractFeeFromAmount = true;
-		for (double i = .50; i < MAX_FEEDBACK_ITERATIONS; i += INCREMENTOR)
+		CAmount nAllocated = nUsed - (1 * COIN);
+		CRecipient recipient = {spkCPKScript, nAllocated, false, fSubtractFeeFromAmount};
+		std::vector<CRecipient> vecSend;
+		vecSend.push_back(recipient);
+		CAmount nFeeRequired = 0;
+		fCreated = pwalletMain->CreateTransaction(vecSend, wtx, reservekey, nFeeRequired, nChangePosRet, strError, NULL, true, ALL_COINS, false, 0, sXML, nMinCoinAge, nAllocated);
+		double nTest = GetAntiBotNetWeight(chainActive.Tip()->GetBlockTime(), wtx.tx, true, "");
+		sDebugInfo = "TargetWeight=" + RoundToString(nTargetABNWeight, 0) + ", UsingBBP=" + RoundToString((double)nUsed/COIN, 2) 
+				+ ", SpendingBBP=" + RoundToString((double)nAllocated/COIN, 2) + ", NeededWeight=" + RoundToString(nMinCoinAge, 0) + ", GotWeight=" + RoundToString(nTest, 2);
+		sMiningInfo = "[" + RoundToString(nMinCoinAge, 0) + " ABN OK] Amount=" + RoundToString(nUsed/COIN, 2) + ", Weight=" + RoundToString(nTest, 2);
+		if (fDebug)
 		{
-			CAmount nAllocated = nUsed * i;
-			CRecipient recipient = {spkCPKScript, nAllocated, false, fSubtractFeeFromAmount};
-			std::vector<CRecipient> vecSend;
-			vecSend.push_back(recipient);
-			if (i > (MAX_FEEDBACK_ITERATIONS * .75))
-				nAllocated = nAllocated * 2;
-			CAmount nFeeRequired = 0;
-			fCreated = pwalletMain->CreateTransaction(vecSend, wtx, reservekey, nFeeRequired, nChangePosRet, strError, NULL, true, ALL_COINS, false, 0, sXML, nMinCoinAge, nAllocated);
-			double nTest = GetAntiBotNetWeight(chainActive.Tip()->GetBlockTime(), wtx.tx);
-			sDebugInfo = "TargetWeight=" + RoundToString(nTargetABNWeight, 0) + ", UsingBBP=" + RoundToString(nUsed/COIN, 2) 
-				+ ", I=" + RoundToString(i, 0) + ", NeededWeight=" + RoundToString(nMinCoinAge, 0) + ", GotWeight=" + RoundToString(nTest, 2);
-			sMiningInfo = "[" + RoundToString(nMinCoinAge, 0) + " ABN OK] Amount=" + RoundToString(nUsed/COIN, 2) + ", Weight=" + RoundToString(nTest, 2);
-			if (fDebug)
-			{
-				LogPrintf(" CreateABN::%s", sDebugInfo);
-			}
-			if (fCreated && nTest >= nMinCoinAge)
-			{
-				// Bubble ABN info to user
-				WriteCache("poolthread0", "poolinfo4", sMiningInfo, GetAdjustedTime());
-				break;
-			}
+			LogPrintf(" CreateABN::%s", sDebugInfo);
 		}
-
+		if (fCreated && nTest >= nMinCoinAge)
+		{
+			// Bubble ABN info to user
+			WriteCache("poolthread0", "poolinfo4", sMiningInfo, GetAdjustedTime());
+		}
+	
 		if (bTriedToUnlock)
 			pwalletMain->Lock();
 		if (!fCreated)    
@@ -2474,22 +2498,24 @@ double GetABNWeight(const CBlock& block, bool fMining)
 {
 	if (block.vtx.size() < 1) return 0;
 	std::string sMsg = GetTransactionMessage(block.vtx[0]);
+	std::string sSolver = PubKeyToAddress(block.vtx[0]->vout[0].scriptPubKey);
 	int nABNLocator = (int)cdbl(ExtractXML(sMsg, "<abnlocator>", "</abnlocator>"), 0);
 	if (block.vtx.size() < nABNLocator) return 0;
 	CTransactionRef tx = block.vtx[nABNLocator];
-	double dWeight = GetAntiBotNetWeight(block.GetBlockTime(), tx);
+	double dWeight = GetAntiBotNetWeight(block.GetBlockTime(), tx, true, sSolver);
 	return dWeight;
 }
 
 bool CheckABNSignature(const CBlock& block, std::string& out_CPK)
 {
 	if (block.vtx.size() < 1) return 0;
+	std::string sSolver = PubKeyToAddress(block.vtx[0]->vout[0].scriptPubKey);
 	std::string sMsg = GetTransactionMessage(block.vtx[0]);
 	int nABNLocator = (int)cdbl(ExtractXML(sMsg, "<abnlocator>", "</abnlocator>"), 0);
 	if (block.vtx.size() < nABNLocator) return 0;
 	CTransactionRef tx = block.vtx[nABNLocator];
 	out_CPK = ExtractXML(tx->GetTxMessage(), "<abncpk>", "</abncpk>");
-	return CheckAntiBotNetSignature(tx, "abn");
+	return CheckAntiBotNetSignature(tx, "abn", sSolver);
 }
 
 std::string GetPOGBusinessObjectList(std::string sType, std::string sFields)
@@ -2599,5 +2625,77 @@ CAmount GetNonTitheTotal(CTransaction tx)
 		}
 	}
 	return nTotal;
+}
+
+double AddVector(std::string sData, std::string sDelim)
+{
+	double dTotal = 0;
+	std::vector<std::string> vAdd = Split(sData.c_str(), sDelim);
+	for (int i = 0; i < (int)vAdd.size(); i++)
+	{
+		std::string sElement = vAdd[i];
+		double dAmt = cdbl(sElement, 2);
+		dTotal += dAmt;
+	}
+	return dTotal;
+}
+
+int ReassessAllChains()
+{
+    int iProgress = 0;
+    LOCK(cs_main);
+    std::set<const CBlockIndex*, CompareBlocksByHeight> setTips;
+    BOOST_FOREACH(const PAIRTYPE(const uint256, CBlockIndex*)& item, mapBlockIndex)
+	{
+		if (item.second != NULL) 
+			setTips.insert(item.second);
+	}
+
+    BOOST_FOREACH(const PAIRTYPE(const uint256, CBlockIndex*)& item, mapBlockIndex)
+    {
+		if (item.second != NULL)
+		{
+			if (item.second->pprev != NULL)
+			{
+				const CBlockIndex* pprev = item.second->pprev;
+				if (pprev)
+					setTips.erase(pprev);
+			}
+		}
+    }
+
+    int nBranchMin = -1;
+    int nCountMax = INT_MAX;
+
+	BOOST_FOREACH(const CBlockIndex* block, setTips)
+    {
+        const CBlockIndex* pindexFork = chainActive.FindFork(block);
+        const int branchLen = block->nHeight - chainActive.FindFork(block)->nHeight;
+        if(branchLen < nBranchMin)
+			continue;
+
+        if(nCountMax-- < 1) 
+			break;
+
+		if (block->nHeight > (chainActive.Tip()->nHeight - (BLOCKS_PER_DAY * 5)))
+		{
+			bool fForked = !chainActive.Contains(block);
+			if (fForked)
+			{
+				uint256 hashFork(uint256S(block->phashBlock->GetHex()));
+				CBlockIndex* pblockindex = mapBlockIndex[hashFork];
+				if (pblockindex != NULL)
+				{
+					LogPrintf("\nReassessAllChains::Working on Fork %s at height %f ", hashFork.GetHex(), block->nHeight);
+					ResetBlockFailureFlags(pblockindex);
+					iProgress++;
+				}
+			}
+		}
+	}
+	
+	CValidationState state;
+	ActivateBestChain(state, Params());
+	return iProgress;
 }
 

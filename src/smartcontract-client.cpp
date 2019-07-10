@@ -138,7 +138,7 @@ UniValue SentGSCCReport(int nHeight)
 		{
 			for (unsigned int n = 0; n < block.vtx.size(); n++)
 			{
-				if (block.vtx[n]->IsGSCTransmission() && CheckAntiBotNetSignature(block.vtx[n], "gsc"))
+				if (block.vtx[n]->IsGSCTransmission() && CheckAntiBotNetSignature(block.vtx[n], "gsc", ""))
 				{
 					std::string sCampaignName;
 					std::string sCPK = GetTxCPK(block.vtx[n], sCampaignName);
@@ -252,7 +252,7 @@ CWalletTx CreateGSCClientTransmission(std::string sCampaign, std::string sDiary,
 		sError = "CreateGSCTransmission::Fail::" + strError;
 		return wtx;
 	}
-	bool fChecked = CheckAntiBotNetSignature(wtx.tx, "gsc");
+	bool fChecked = CheckAntiBotNetSignature(wtx.tx, "gsc", "");
 	if (!fChecked)
 	{
 		sError = "CreateGSCTransmission::Fail::Signing Failed.";
@@ -340,7 +340,8 @@ bool CreateClientSideTransaction(bool fForce, bool fDiaryProjectsOnly, std::stri
 				CWalletTx wtx = CreateGSCClientTransmission(s.first, sDiary, chainActive.Tip(), nCoinAgePercentage, nFoundationDonation, reservekey, sXML, sError2);
 				LogPrintf("\nCreated client side transmission - %s [%s] with txid %s ", sXML, sError, wtx.tx->GetHash().GetHex());
 				// Bubble any error to getmininginfo - or clear the error
-				WriteCache("gsc", "errors", s.first + ": " + sError2, GetAdjustedTime());
+				if (!sError2.empty())
+					WriteCache("gsc", "errors", s.first + ": " + sError2, GetAdjustedTime());
 				CValidationState state;
 
 				if (sError2.empty())

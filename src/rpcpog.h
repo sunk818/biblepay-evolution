@@ -9,7 +9,6 @@
 #include "hash.h"
 #include "net.h"
 #include "utilstrencodings.h"
-#include "validation.h"
 #include <univalue.h>
 
 class CWallet;
@@ -65,6 +64,21 @@ struct BiblePayProposal
 	std::string sProposalHRTime;
 };
 
+/** Comparison function for sorting the getchaintips heads.  */
+struct CompareBlocksByHeight
+{
+    bool operator()(const CBlockIndex* a, const CBlockIndex* b) const
+    {
+        /* Make sure that unequal blocks with the same height do not compare
+           equal. Use the pointers themselves to make a distinction. */
+
+        if (a->nHeight != b->nHeight)
+          return (a->nHeight > b->nHeight);
+
+        return a < b;
+    }
+};
+
 CAmount CAmountFromValue(const UniValue& value);
 std::string RoundToString(double d, int place);
 std::string QueryBibleHashVerses(uint256 hash, uint64_t nBlockTime, uint64_t nPrevBlockTime, int nPrevHeight, CBlockIndex* pindexPrev);
@@ -72,6 +86,7 @@ CAmount GetDailyMinerEmissions(int nHeight);
 std::string CreateBankrollDenominations(double nQuantity, CAmount denominationAmount, std::string& sError);
 std::string DefaultRecAddress(std::string sType);
 std::string GenerateNewAddress(std::string& sError, std::string sName);
+CAmount SelectCoinsForTithing(const CBlockIndex* pindex);
 CAmount GetTitheTotal(CTransaction tx);
 bool IsTitheLegal(CTransaction ctx, CBlockIndex* pindex, CAmount tithe_amount);
 void GetTxTimeAndAmountAndHeight(uint256 hashInput, int hashInputOrdinal, int64_t& out_nTime, CAmount& out_caAmount, int& out_height);
@@ -167,15 +182,15 @@ bool WriteKey(std::string sKey, std::string sValue);
 std::string GetTransactionMessage(CTransactionRef tx);
 std::map<std::string, CPK> GetChildMap(std::string sGSCObjType);
 bool AdvertiseChristianPublicKeypair(std::string sProjectId, std::string sNickName, std::string sEmail, std::string sVendorType, bool fUnJoin, bool fForce, CAmount nFee, std::string sOptData, std::string &sError);
-CWalletTx CreateAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReserveKey& reservekey, std::string& sXML, std::string& sError);
-double GetAntiBotNetWeight(int64_t nBlockTime, CTransactionRef tx);
+CWalletTx CreateAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReserveKey& reservekey, std::string& sXML, std::string sPoolMiningPublicKey, std::string& sError);
+double GetAntiBotNetWeight(int64_t nBlockTime, CTransactionRef tx, bool fDebug, std::string sSolver);
 double GetABNWeight(const CBlock& block, bool fMining);
 std::map<std::string, std::string> GetSporkMap(std::string sPrimaryKey, std::string sSecondaryKey);
 std::map<std::string, CPK> GetGSCMap(std::string sGSCObjType, std::string sSearch, bool fRequireSig);
 void WriteCacheDouble(std::string sKey, double dValue);
 double ReadCacheDouble(std::string sKey);
-bool CheckAntiBotNetSignature(CTransactionRef tx, std::string sType);
-double GetVINCoinAge(int64_t nBlockTime, CTransactionRef tx);
+bool CheckAntiBotNetSignature(CTransactionRef tx, std::string sType, std::string sSolver);
+double GetVINCoinAge(int64_t nBlockTime, CTransactionRef tx, bool fDebug);
 CAmount GetTitheAmount(CTransactionRef ctx);
 CPK GetCPK(std::string sData);
 std::string GetCPKData(std::string sProjectId, std::string sPK);
@@ -187,8 +202,9 @@ std::string GetPOGBusinessObjectList(std::string sType, std::string sFields);
 std::string SignMessageEvo(std::string strAddress, std::string strMessage, std::string& sError);
 CAmount GetNonTitheTotal(CTransaction tx);
 const CBlockIndex* GetBlockIndexByTransactionHash(const uint256 &hash);
-CWalletTx GetAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReserveKey& reservekey, std::string& sXML, std::string& sError);
+CWalletTx GetAntiBotNetTx(CBlockIndex* pindexLast, double nMinCoinAge, CReserveKey& reservekey, std::string& sXML, std::string sPoolMiningPublicKey, std::string& sError);
 void SpendABN();
-double GetFees(CTransactionRef tx);
+double AddVector(std::string sData, std::string sDelim);
+int ReassessAllChains();
 
 #endif

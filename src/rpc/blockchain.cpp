@@ -1422,21 +1422,6 @@ UniValue getblockchaininfo(const JSONRPCRequest& request)
     return obj;
 }
 
-/** Comparison function for sorting the getchaintips heads.  */
-struct CompareBlocksByHeight
-{
-    bool operator()(const CBlockIndex* a, const CBlockIndex* b) const
-    {
-        /* Make sure that unequal blocks with the same height do not compare
-           equal. Use the pointers themselves to make a distinction. */
-
-        if (a->nHeight != b->nHeight)
-          return (a->nHeight > b->nHeight);
-
-        return a < b;
-    }
-};
-
 UniValue getchaintips(const JSONRPCRequest& request)
 {
 	    if (request.fHelp || request.params.size() > 4)
@@ -1922,6 +1907,11 @@ UniValue exec(const JSONRPCRequest& request)
 		UniValue aDataList = GetDataList("SIN", 7, iSpecificEntry, "", sEntry);
 		return aDataList;
 	}
+	else if (sItem == "reassesschains")
+	{
+		int iWorkDone = ReassessAllChains();
+		results.push_back(Pair("progress", iWorkDone));
+	}
 	else if (sItem == "autounlockpasswordlength")
 	{
 		results.push_back(Pair("Length", (double)msEncryptedString.size()));
@@ -1995,6 +1985,8 @@ UniValue exec(const JSONRPCRequest& request)
 		results.push_back(Pair("govobjhash", uGovObjHash.GetHex()));
 		results.push_back(Pair("Addresses", sAddresses));
 		results.push_back(Pair("Amounts", sAmounts));
+		double dTotal = AddVector(sAmounts, "|");
+		results.push_back(Pair("Total_Target_Spend", dTotal));
 		if (uGovObjHash == uint256S("0x0"))
 		{
 			// create the contract
@@ -2022,6 +2014,15 @@ UniValue exec(const JSONRPCRequest& request)
 		results.push_back(Pair("required_votes", iRequiredVotes));
 		results.push_back(Pair("last_superblock", iLastSuperblock));
 		results.push_back(Pair("next_superblock", iNextSuperblock));
+		CAmount nLastLimit = CSuperblock::GetPaymentsLimit(iLastSuperblock);
+		results.push_back(Pair("last_payments_limit", (double)nLastLimit/COIN));
+		CAmount nNextLimit = CSuperblock::GetPaymentsLimit(iNextSuperblock);
+		results.push_back(Pair("next_payments_limit", (double)nNextLimit/COIN));
+		bool fOverbudget = dTotal > (nNextLimit/COIN);
+		results.push_back(Pair("overbudget", fOverbudget));
+		if (fOverbudget)
+			results.push_back(Pair("! CAUTION !", "Superblock exceeds budget, will be rejected."));
+	
 		bool fTriggered = CSuperblockManager::IsSuperblockTriggered(iNextSuperblock);
 		results.push_back(Pair("next_superblock_triggered", fTriggered));
 
@@ -2128,7 +2129,7 @@ UniValue exec(const JSONRPCRequest& request)
 			dMin = cdbl(request.params[1].get_str(), 2);
 		if (request.params.size() > 2)
 			dDebug = cdbl(request.params[2].get_str(), 2);
-		results.push_back(Pair("version", 1.2));
+		results.push_back(Pair("version", 2.2));
 		results.push_back(Pair("weight", dABN));
 		results.push_back(Pair("total_required", nTotalReq / COIN));
 		if (dMin > 0) 
@@ -2136,7 +2137,9 @@ UniValue exec(const JSONRPCRequest& request)
 			dABN = pwalletMain->GetAntiBotNetWalletWeight(dMin, nTotalReq);
 			if (dDebug == 1)
 			{
-				results.push_back(Pair("coin_age_data_pre_select", ReadCache("coin", "age")));
+				std::string sData = ReadCache("coin", "age");
+				if (sData.length() < 1000000)
+					results.push_back(Pair("coin_age_data_pre_select", sData));
 			}
 
 			results.push_back(Pair("weight " + RoundToString(dMin, 2), dABN));
@@ -2185,7 +2188,7 @@ UniValue exec(const JSONRPCRequest& request)
 		{
 		    CBlockIndex* pblockindex = mapBlockIndex[hashBlock];
 			if (!pblockindex) pblockindex = chainActive.Tip();
-			double nAuditedWeight = GetAntiBotNetWeight(pblockindex->GetBlockTime(), tx);
+			double nAuditedWeight = GetAntiBotNetWeight(pblockindex->GetBlockTime(), tx, true, "");
 			results.push_back(Pair("audited_weight", nAuditedWeight));
 		}
 		else
@@ -2197,11 +2200,12 @@ UniValue exec(const JSONRPCRequest& request)
 	{
 		std::string sError;
 		std::string sXML;
+		WriteCache("vin", "coinage", "", GetAdjustedTime());
 		double dTargetWeight = 0;
 		if (request.params.size() > 1)
 			dTargetWeight = cdbl(request.params[1].get_str(), 2);
 		CReserveKey reserveKey(pwalletMain);
-		CWalletTx wtx = CreateAntiBotNetTx(chainActive.Tip(), dTargetWeight, reserveKey, sXML, sError);
+		CWalletTx wtx = CreateAntiBotNetTx(chainActive.Tip(), dTargetWeight, reserveKey, sXML, "ppk", sError);
 	
 		results.push_back(Pair("xml", sXML));
 		results.push_back(Pair("err", sError));
@@ -2209,13 +2213,26 @@ UniValue exec(const JSONRPCRequest& request)
 		{
 				results.push_back(Pair("coin_age_data_selected", ReadCache("availablecoins", "age")));
 				results.push_back(Pair("success", wtx.GetHash().GetHex()));
-				double nAuditedWeight = GetAntiBotNetWeight(chainActive.Tip()->GetBlockTime(), wtx.tx);
-				results.push_back(Pair("coin_age_data_pre_select", ReadCache("coin", "age")));
+				double nAuditedWeight = GetAntiBotNetWeight(chainActive.Tip()->GetBlockTime(), wtx.tx, true, "");
+				std::string sData = ReadCache("coin", "age");
+				if (sData.length() < 1000000)
+					results.push_back(Pair("coin_age_data_pre_select", sData));
 				results.push_back(Pair("audited_weight", nAuditedWeight));
+				results.push_back(Pair("vin_coin_age_data", ReadCache("vin", "coinage")));
 		}
 		else
 		{
 			results.push_back(Pair("age_data", ReadCache("availablecoins", "age")));
+			if (true)
+			{
+				double nAuditedWeight = GetAntiBotNetWeight(chainActive.Tip()->GetBlockTime(), wtx.tx, true, "");
+				results.push_back(Pair("vin_coin_age_data", ReadCache("vin", "coinage")));
+				std::string sData1 = ReadCache("coin", "age");
+				if (sData1.length() < 1000000)
+						results.push_back(Pair("coin_age_data_pre_select", sData1));
+				results.push_back(Pair("total_audited_weight", nAuditedWeight));
+			}
+	
 			results.push_back(Pair("tx_create_error", sError));
 		}
 	}
@@ -2473,7 +2490,7 @@ UniValue exec(const JSONRPCRequest& request)
 				std::string sCPK = ExtractXML(tx->GetTxMessage(), "<abncpk>", "</abncpk>");
 				results.push_back(Pair("anti_gpu_xml", tx->GetTxMessage()));
 				results.push_back(Pair("cpk", sCPK));
-				bool fValid = CheckAntiBotNetSignature(tx, "abn");
+				bool fValid = CheckAntiBotNetSignature(tx, "abn", "");
 				results.push_back(Pair("sig_valid", fValid));
 				bool fAntiGPU = AntiGPU(block, pblockindex->pprev);
 				results.push_back(Pair("anti-gpu", fAntiGPU));
