@@ -33,10 +33,6 @@
 #include "smartcontract-client.h"
 #include "smartcontract-server.h"
 #include "masternode-sync.h"
-#include "llmq/quorums_chainlocks.h"	
-#include "llmq/quorums_instantsend.h"
-#include "bbpsocket.h"
-
 #include <stdint.h>
 
 #include <univalue.h>
@@ -62,13 +58,6 @@ UniValue protx_register(const JSONRPCRequest& request);
 UniValue protx(const JSONRPCRequest& request);
 UniValue _bls(const JSONRPCRequest& request);
 
-/**	
- * Get the difficulty of the network at the given block index, or the chain tip if	
- * not provided.	
- *	
- * @return A floating point number that is a multiple of the main net minimum	
- * difficulty (4295032833 hashes).	
- */
 double GetDifficulty(const CBlockIndex* blockindex)
 {
     // Floating point number that is a multiple of the minimum difficulty,
@@ -125,7 +114,6 @@ UniValue blockheaderToJSON(const CBlockIndex* blockindex)
     CBlockIndex *pnext = chainActive.Next(blockindex);
     if (pnext)
         result.push_back(Pair("nextblockhash", pnext->GetBlockHash().GetHex()));
-	result.push_back(Pair("chainlock", llmq::chainLocksHandler->HasChainLock(blockindex->nHeight, blockindex->GetBlockHash())));	
     return result;
 }
 
@@ -204,7 +192,7 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool tx
 			result.push_back(Pair("satisfiesbiblehash", bSatisfiesBibleHash ? "true" : "false"));
 		result.push_back(Pair("biblehash", bibleHash.GetHex()));
 		result.push_back(Pair("chaindata", block.vtx[0]->vout[0].sTxOutMessage));
-		bool fEnabled = sporkManager.IsSporkActive(SPORK_30_QUANTITATIVE_TIGHTENING_ENABLED);
+		bool fEnabled = sporkManager.IsSporkActive(SPORK_20_QUANTITATIVE_TIGHTENING_ENABLED);
 		if (fEnabled)
 		{
 			double dPriorPrice = 0;
@@ -213,8 +201,6 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool tx
 			result.push_back(Pair("qt_pct", dQTPct));
 		}
 	}
-	result.push_back(Pair("chainlock", llmq::chainLocksHandler->HasChainLock(blockindex->nHeight, blockindex->GetBlockHash())));
-
     CBlockIndex *pnext = chainActive.Next(blockindex);
     if (pnext)
         result.push_back(Pair("nextblockhash", pnext->GetBlockHash().GetHex()));
@@ -447,6 +433,8 @@ void entryToJSON(UniValue &info, const CTxMemPoolEntry &e)
     info.push_back(Pair("modifiedfee", ValueFromAmount(e.GetModifiedFee())));
     info.push_back(Pair("time", e.GetTime()));
     info.push_back(Pair("height", (int)e.GetHeight()));
+    info.push_back(Pair("startingpriority", e.GetPriority(e.GetHeight())));
+    info.push_back(Pair("currentpriority", e.GetPriority(chainActive.Height())));
     info.push_back(Pair("descendantcount", e.GetCountWithDescendants()));
     info.push_back(Pair("descendantsize", e.GetSizeWithDescendants()));
     info.push_back(Pair("descendantfees", e.GetModFeesWithDescendants()));
@@ -469,7 +457,7 @@ void entryToJSON(UniValue &info, const CTxMemPoolEntry &e)
 
     info.push_back(Pair("depends", depends));
     info.push_back(Pair("instantsend", instantsend.HasTxLockRequest(tx.GetHash())));
-    info.push_back(Pair("instantlock", instantsend.IsLockedInstantSendTransaction(tx.GetHash()) || llmq::quorumInstantSendManager->IsLocked(tx.GetHash())));
+    info.push_back(Pair("instantlock", instantsend.IsLockedInstantSendTransaction(tx.GetHash())));
 }
 
 UniValue mempoolToJSON(bool fVerbose = false)
@@ -926,11 +914,6 @@ UniValue getblock(const JSONRPCRequest& request)
             "     \"transactionid\"     (string) The transaction id\n"
             "     ,...\n"
             "  ],\n"
-			"  \"cbTx\" : {             (json object) The coinbase special transaction \n"	
-            "     \"version\"           (numeric) The coinbase special transaction version\n"	
-            "     \"height\"            (numeric) The block height\n"	
-            "     \"merkleRootMNList\" : \"xxxx\", (string) The merkle root of the masternode list\n"	
-            "  },\n"
             "  \"time\" : ttt,          (numeric) The block time in seconds since epoch (Jan 1 1970 GMT)\n"
             "  \"mediantime\" : ttt,    (numeric) The median block time in seconds since epoch (Jan 1 1970 GMT)\n"
             "  \"nonce\" : n,           (numeric) The nonce\n"
@@ -981,10 +964,10 @@ UniValue getblock(const JSONRPCRequest& request)
     CBlockIndex* pblockindex = mapBlockIndex[hash];
 
     if (fHavePruned && !(pblockindex->nStatus & BLOCK_HAVE_DATA) && pblockindex->nTx > 0)
-        throw JSONRPCError(RPC_MISC_ERROR, "Block not available (pruned data)");
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Block not available (pruned data)");
 
     if(!ReadBlockFromDisk(block, pblockindex, Params().GetConsensus()))
-        throw JSONRPCError(RPC_MISC_ERROR, "Can't read block from disk");
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Can't read block from disk");
 
     if (verbosity <= 0)
     {
@@ -1079,7 +1062,7 @@ UniValue pruneblockchain(const JSONRPCRequest& request)
             + HelpExampleRpc("pruneblockchain", "1000"));
 
     if (!fPruneMode)
-        throw JSONRPCError(RPC_MISC_ERROR, "Cannot prune blocks because node is not in prune mode.");
+        throw JSONRPCError(RPC_METHOD_NOT_FOUND, "Cannot prune blocks because node is not in prune mode.");
 
     LOCK(cs_main);
 
@@ -1091,9 +1074,9 @@ UniValue pruneblockchain(const JSONRPCRequest& request)
     // too low to be a block time (corresponds to timestamp from Sep 2001).
     if (heightParam > 1000000000) {
         // Add a 2 hour buffer to include blocks which might have had old timestamps
-        CBlockIndex* pindex = chainActive.FindEarliestAtLeast(heightParam - TIMESTAMP_WINDOW);
+        CBlockIndex* pindex = chainActive.FindEarliestAtLeast(heightParam - 7200);
         if (!pindex) {
-            throw JSONRPCError(RPC_INVALID_PARAMETER, "Could not find block with at least the specified timestamp.");
+            throw JSONRPCError(RPC_INTERNAL_ERROR, "Could not find block with at least the specified timestamp.");
         }
         heightParam = pindex->nHeight;
     }
@@ -1403,9 +1386,9 @@ UniValue getblockchaininfo(const JSONRPCRequest& request)
 	If we ever want to enable DEPLOYMENT_CSV, we need to change the chainparam deployment window to be the future, and check the POG business logic for height delta calculations.
 	BIP9SoftForkDescPushBack(bip9_softforks, "csv", consensusParams, Consensus::DEPLOYMENT_CSV);
 	DIP0001 is a vote to allow up to 2MB blocks.  BiblePay moved to 2MB blocks before DIP1 and therefore our vote never started, but our code uses the 2MB hardcoded literal (matching dash).  So we want to comment out this DIP1 versionbits response as it does not reflect our environment.
+    BIP9SoftForkDescPushBack(bip9_softforks, "csv", consensusParams, Consensus::DEPLOYMENT_CSV);
     BIP9SoftForkDescPushBack(bip9_softforks, "dip0001", consensusParams, Consensus::DEPLOYMENT_DIP0001);
-    */
-
+	*/
     BIP9SoftForkDescPushBack(bip9_softforks, "dip0003", consensusParams, Consensus::DEPLOYMENT_DIP0003);
     BIP9SoftForkDescPushBack(bip9_softforks, "bip147", consensusParams, Consensus::DEPLOYMENT_BIP147);
     obj.push_back(Pair("softforks",             softforks));
@@ -1961,12 +1944,6 @@ UniValue exec(const JSONRPCRequest& request)
 		std::string sResult = BiblePayHTTPSPost2(true, "5001", "192.168.0.153", "BiblePayGui/Welcome", "na", "gear.png");
 		results.push_back(Pair("result", sResult));
 	}
-	else if (sItem == "ipfstest2")
-	{
-		std::string sResult = BBPPost("pool.biblepay.org", "80", "Action.aspx?action=ipfs", "payload", 10);
-		sResult = BBPPost("dns1.biblepay.org", "40001", "Action.aspx?action=ipfs", "payload", 10);
-		results.push_back(Pair("result", sResult));
-	}
 	else if (sItem == "testgscvote")
 	{
 		int iNextSuperblock = 0;
@@ -2108,13 +2085,7 @@ UniValue exec(const JSONRPCRequest& request)
 			throw std::runtime_error(sError);
 		sError;
 		double dFee = fProd ? 10 : 5001;
-		const Consensus::Params& consensusParams = Params().GetConsensus();	    
-		std::string sSigGSC;	
-		std::string sCPK = consensusParams.FoundationAddress;	
-		std::string sMsg = RoundToString(GetAdjustedTime(), 0);	
-		bool bSigned = SignStake(sCPK, sMsg, sError, sSigGSC);	
-		std::string sExtraGscPayload = "<gscsig>" + sSigGSC + "</gscsig><abncpk>" + sCPK + "</abncpk><abnmsg>" + sMsg + "</abnmsg>";
-		std::string sResult = SendBlockchainMessage(sType, sPrimaryKey, sValue, dFee, true, sExtraGscPayload, sError);	
+    	std::string sResult = SendBlockchainMessage(sType, sPrimaryKey, sValue, dFee, true, "", sError);
 		results.push_back(Pair("Sent", sValue));
 		results.push_back(Pair("TXID", sResult));
 		if (!sError.empty()) results.push_back(Pair("Error", sError));
@@ -2129,7 +2100,7 @@ UniValue exec(const JSONRPCRequest& request)
 			dMin = cdbl(request.params[1].get_str(), 2);
 		if (request.params.size() > 2)
 			dDebug = cdbl(request.params[2].get_str(), 2);
-		results.push_back(Pair("version", 2.2));
+		results.push_back(Pair("version", 2.3));
 		results.push_back(Pair("weight", dABN));
 		results.push_back(Pair("total_required", nTotalReq / COIN));
 		if (dMin > 0) 
@@ -2304,7 +2275,7 @@ UniValue exec(const JSONRPCRequest& request)
 				}
 			}
 		}
-		EnsureWalletIsUnlocked(pwalletMain);
+		EnsureWalletIsUnlocked();
 		// Check funds
 		CAmount nBalance = pwalletMain->GetAccountBalance(strAccount, nMinDepth, ISMINE_SPENDABLE, false);
 		if (totalAmount > nBalance)
@@ -2513,7 +2484,7 @@ UniValue exec(const JSONRPCRequest& request)
 		double dPrice = GetPBase(out_BTC);
 		double dFuturePhase = GetQTPhase(true, dPrice, chainActive.Tip()->nHeight, dPriorPrice, dPriorPhase);
 		results.push_back(Pair("qt_future_phase", dFuturePhase));
-		bool fEnabled = sporkManager.IsSporkActive(SPORK_30_QUANTITATIVE_TIGHTENING_ENABLED);
+		bool fEnabled = sporkManager.IsSporkActive(SPORK_20_QUANTITATIVE_TIGHTENING_ENABLED);
 		results.push_back(Pair("qt_enabled", fEnabled));
 		results.push_back(Pair("cur_price", RoundToString(dPrice, 12)));
 		double dBBP = GetCryptoPrice("bbp");
@@ -2638,7 +2609,7 @@ UniValue exec(const JSONRPCRequest& request)
 		// ** This command is strictly for testing only by the devs - please disregard **
 		// BiblePay - Purchase Plug-In API for web purchases
 		// The users Public-Funding-Address keypair contains the user funds they will purchase with (send test funds here)
-	    EnsureWalletIsUnlocked(pwalletMain);
+	    EnsureWalletIsUnlocked();
 		// We authenticate with the CPK (this allows sites to not require log-in credentials, and to know the users nickname)
 		// We DO NOT pass the CPKs private key outside of the wallet
 		std::string sCPK = DefaultRecAddress("Christian-Public-Key");
@@ -2746,19 +2717,6 @@ UniValue exec(const JSONRPCRequest& request)
 			results.push_back(Pair("Balance " + RoundToString(nTotalReq / COIN, 2) + " Annualized ROI %", nROIBalance));
 		}
 	}
-	else if (sItem == "dailysponsorshipcap")	
-	{	
-		double nCap = GetProminenceCap("CAMEROON-ONE", 1333, .50);
-		results.push_back(Pair("cap", nCap));
-	}
-	else if (sItem == "getchildbalance")
-	{	
-		if (request.params.size() != 2)	
-			throw std::runtime_error("You must specify the childID.");	
-		std::string sChildID = request.params[1].get_str();	
-		double dBal = GetCameroonChildBalance(sChildID);	
-		results.push_back(Pair("Balance", dBal));	
-	}
 	else if (sItem == "debugtool1")
 	{
 		std::string sBlock = request.params[1].get_str();
@@ -2786,6 +2744,19 @@ UniValue exec(const JSONRPCRequest& request)
 		results.push_back(Pair("LBI", fLBI));
 		results.push_back(Pair("abnreqweight", nMinRequiredABNWeight));
 		results.push_back(Pair("abnheight", nABNHeight));
+	}
+	else if (sItem == "dailysponsorshipcap")	
+	{	
+		double nCap = GetProminenceCap("CAMEROON-ONE", 1333, .50);
+		results.push_back(Pair("cap", nCap));
+	}
+	else if (sItem == "getchildbalance")
+	{	
+		if (request.params.size() != 2)	
+			throw std::runtime_error("You must specify the childID.");	
+		std::string sChildID = request.params[1].get_str();	
+		double dBal = GetCameroonChildBalance(sChildID);	
+		results.push_back(Pair("Balance", dBal));	
 	}
 	else if (sItem == "datalist")
 	{

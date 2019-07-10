@@ -28,7 +28,7 @@
 #include "evo/simplifiedmns.h"
 #include "evo/cbtx.h"
 #include "smartcontract-client.h"
-
+#include "smartcontract-server.h"
 
 #include "bls/bls.h"
 
@@ -1223,7 +1223,7 @@ UniValue sponsorchild(const JSONRPCRequest& request)
 	std::string sProject = "cpk|cameroon-one";
     EnsureWalletIsUnlocked(pwalletMain);
 
-	CAmount nFee = 500 * COIN;
+	CAmount nFee = 50000 * COIN;
 	std::string sChildId = GetRandHash().GetHex().substr(0,8);
 	std::string sKey = sProject + "|" + sChildId;
 	bool fAdv = AdvertiseChristianPublicKeypair(sKey, "", "", "", false, false, nFee, sChildId, sError);
