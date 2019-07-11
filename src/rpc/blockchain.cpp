@@ -192,7 +192,7 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool tx
 			result.push_back(Pair("satisfiesbiblehash", bSatisfiesBibleHash ? "true" : "false"));
 		result.push_back(Pair("biblehash", bibleHash.GetHex()));
 		result.push_back(Pair("chaindata", block.vtx[0]->vout[0].sTxOutMessage));
-		bool fEnabled = sporkManager.IsSporkActive(SPORK_20_QUANTITATIVE_TIGHTENING_ENABLED);
+		bool fEnabled = sporkManager.IsSporkActive(SPORK_30_QUANTITATIVE_TIGHTENING_ENABLED);
 		if (fEnabled)
 		{
 			double dPriorPrice = 0;
@@ -433,8 +433,6 @@ void entryToJSON(UniValue &info, const CTxMemPoolEntry &e)
     info.push_back(Pair("modifiedfee", ValueFromAmount(e.GetModifiedFee())));
     info.push_back(Pair("time", e.GetTime()));
     info.push_back(Pair("height", (int)e.GetHeight()));
-    info.push_back(Pair("startingpriority", e.GetPriority(e.GetHeight())));
-    info.push_back(Pair("currentpriority", e.GetPriority(chainActive.Height())));
     info.push_back(Pair("descendantcount", e.GetCountWithDescendants()));
     info.push_back(Pair("descendantsize", e.GetSizeWithDescendants()));
     info.push_back(Pair("descendantfees", e.GetModFeesWithDescendants()));
@@ -2275,7 +2273,7 @@ UniValue exec(const JSONRPCRequest& request)
 				}
 			}
 		}
-		EnsureWalletIsUnlocked();
+		EnsureWalletIsUnlocked(pwalletMain);
 		// Check funds
 		CAmount nBalance = pwalletMain->GetAccountBalance(strAccount, nMinDepth, ISMINE_SPENDABLE, false);
 		if (totalAmount > nBalance)
@@ -2484,7 +2482,7 @@ UniValue exec(const JSONRPCRequest& request)
 		double dPrice = GetPBase(out_BTC);
 		double dFuturePhase = GetQTPhase(true, dPrice, chainActive.Tip()->nHeight, dPriorPrice, dPriorPhase);
 		results.push_back(Pair("qt_future_phase", dFuturePhase));
-		bool fEnabled = sporkManager.IsSporkActive(SPORK_20_QUANTITATIVE_TIGHTENING_ENABLED);
+		bool fEnabled = sporkManager.IsSporkActive(SPORK_30_QUANTITATIVE_TIGHTENING_ENABLED);
 		results.push_back(Pair("qt_enabled", fEnabled));
 		results.push_back(Pair("cur_price", RoundToString(dPrice, 12)));
 		double dBBP = GetCryptoPrice("bbp");
@@ -2609,7 +2607,7 @@ UniValue exec(const JSONRPCRequest& request)
 		// ** This command is strictly for testing only by the devs - please disregard **
 		// BiblePay - Purchase Plug-In API for web purchases
 		// The users Public-Funding-Address keypair contains the user funds they will purchase with (send test funds here)
-	    EnsureWalletIsUnlocked();
+	    EnsureWalletIsUnlocked(pwalletMain);
 		// We authenticate with the CPK (this allows sites to not require log-in credentials, and to know the users nickname)
 		// We DO NOT pass the CPKs private key outside of the wallet
 		std::string sCPK = DefaultRecAddress("Christian-Public-Key");

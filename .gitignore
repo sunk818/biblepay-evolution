@@ -135,3 +135,5 @@ make
 # CLion
 .idea
 cmake-build-debug
+contrib/devtools/windows/DevelopBiblePay.sln
+contrib/devtools/windows/DevelopBiblePay.suo

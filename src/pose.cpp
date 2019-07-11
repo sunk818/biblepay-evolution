@@ -130,7 +130,7 @@ void ThreadPOSE(CConnman& connman)
 			{
 				LogPrintf("Error encountered in POSE main loop. %f \n", 0);
 			}
-			int iSleeper = fProd ? 7 : 1;
+			int iSleeper = fProd ? 10 : 3;
 			MilliSleep(iSleeper * 60000);
 		}
 	}

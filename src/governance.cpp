@@ -211,7 +211,7 @@ void CGovernanceManager::ProcessMessage(CNode* pfrom, const std::string& strComm
 			{
                 LogPrintf("MNGOVERNANCEOBJECT -- Governance object is invalid - %s\n", strError);
                 // apply node's ban score
-				Misbehaving(pfrom->GetId(), fProd ? 15 : 1);
+				Misbehaving(pfrom->GetId(), fProd ? 2 : 1);
             }
 
             return;

@@ -2599,9 +2599,6 @@ void CWallet::AvailableCoins(std::vector<COutput>& vCoins, bool fOnlySafe, const
             if (!CheckFinalTx(*pcoin))
 				sWalletReject = "NON_FINAL_TX";
 
-            if (fOnlyConfirmed && !pcoin->IsTrusted())
-				sWalletReject = "ONLY_CONFIRMED_NON_TRUSTED_COIN";
-
             if (pcoin->IsCoinBase() && pcoin->GetBlocksToMaturity() > 0)
 				sWalletReject + "COINBASE_NON_MATURE";
 

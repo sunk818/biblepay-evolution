@@ -8,13 +8,12 @@
 #include "utilmoneystr.h"
 #include "rpcpodc.h"
 #include "init.h"
+#include "bbpsocket.h"
 #include "activemasternode.h"
-#include "masternodeman.h"
 #include "governance-classes.h"
 #include "governance.h"
 #include "masternode-sync.h"
 #include "masternode-payments.h"
-#include "masternodeconfig.h"
 #include "messagesigner.h"
 #include "smartcontract-server.h"
 #include "smartcontract-client.h"
@@ -46,7 +45,9 @@
 #ifdef ENABLE_WALLET
 extern CWallet* pwalletMain;
 #endif // ENABLE_WALLET
-
+UniValue VoteWithMasternodes(const std::map<uint256, CKey>& keys,	
+                             const uint256& hash, vote_signal_enum_t eVoteSignal,	
+                             vote_outcome_enum_t eVoteOutcome);
 
 std::string GenerateNewAddress(std::string& sError, std::string sName)
 {
@@ -293,12 +294,14 @@ std::map<std::string, CPK> GetChildMap(std::string sGSCObjType)
 {
 	std::map<std::string, CPK> mCPKMap;
 	boost::to_upper(sGSCObjType);
+	int i = 0;
 	for (auto ii : mvApplicationCache)
 	{
 		if (Contains(ii.first.first, sGSCObjType))
 		{
 			CPK k = GetCPK(ii.second.first);
-			mCPKMap.insert(std::make_pair(k.sAddress, k));
+			i++;
+			mCPKMap.insert(std::make_pair(k.sAddress + "-" + RoundToString(i, 0), k));
 		}
 	}
 	return mCPKMap;
@@ -785,76 +788,46 @@ bool VoteManyForGobject(std::string govobj, std::string strVoteSignal, std::stri
         sError = "Invalid vote outcome (yes/no/abstain)";
 		return false;
 	}
-  
-    std::vector<CMasternodeConfig::CMasternodeEntry> entries = masternodeConfig.getEntries();
 
-#ifdef ENABLE_WALLET
-    if (deterministicMNManager->IsDeterministicMNsSporkActive()) 
-	{
-        if (!pwalletMain) 
-		{
-			sError = "Voting is not supported when wallet is disabled.";
-			return false;
-        }
-        entries.clear();
-        auto mnList = deterministicMNManager->GetListAtChainTip();
-        mnList.ForEachMN(true, [&](const CDeterministicMNCPtr& dmn) 
-		{
-            bool found = false;
-            for (const auto &mne : entries) 
-			{
-                uint256 nTxHash;
-                nTxHash.SetHex(mne.getTxHash());
-
-                int nOutputIndex = 0;
-                if(!ParseInt32(mne.getOutputIndex(), &nOutputIndex)) {
-                    continue;
-                }
-
-                if (nTxHash == dmn->collateralOutpoint.hash && (uint32_t)nOutputIndex == dmn->collateralOutpoint.n) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                CKey ownerKey;
-                if (pwalletMain->GetKey(dmn->pdmnState->keyIDVoting, ownerKey)) {
-                    CBitcoinSecret secret(ownerKey);
-                    CMasternodeConfig::CMasternodeEntry mne(dmn->proTxHash.ToString(), dmn->pdmnState->addr.ToStringIPPort(false), secret.ToString(), dmn->collateralOutpoint.hash.ToString(), itostr(dmn->collateralOutpoint.n));
-                    entries.push_back(mne);
-                }
-            }
-        });
-    }
-#else
-    if (deterministicMNManager->IsDeterministicMNsSporkActive()) 
-	{
-        sError = "Voting is not supported when wallet is disabled.";
-		return false;
-    }
+#ifdef ENABLE_WALLET	
+    if (!pwalletMain)	
+    {	
+        sError = "Voting is not supported when wallet is disabled.";	
+        return false;	
+    }	
 #endif
-	UniValue vOutcome;
-    
-	try
+
+	std::map<uint256, CKey> votingKeys;	
+
+
+    auto mnList = deterministicMNManager->GetListAtChainTip();
+    mnList.ForEachMN(true, [&](const CDeterministicMNCPtr& dmn) 
 	{
-		vOutcome = VoteWithMasternodeList(entries, hash, eVoteSignal, eVoteOutcome, nSuccessful, nFailed);
-	}
+        CKey votingKey;		
+        if (pwalletMain->GetKey(dmn->pdmnState->keyIDVoting, votingKey)) 
+		{	       
+            votingKeys.emplace(dmn->proTxHash, votingKey);	
+		}
+	});
+	UniValue vOutcome;
+
+
+	try	
+	{	
+		vOutcome = VoteWithMasternodes(votingKeys, hash, eVoteSignal, eVoteOutcome);
+	}	
 	catch(std::runtime_error& e)
 	{
 		sError = e.what();
 		return false;
 	}
-	catch (std::exception& e) 
-	{
-       sError = e.what();
-	   return false;
-    }
 	catch (...) 
 	{
 		sError = "Voting failed.";
 		return false;
 	}
     
+	nSuccessful = cdbl(vOutcome["success_count"].getValStr(), 0);	
 	bool fResult = nSuccessful > 0 ? true : false;
 	return fResult;
 }
