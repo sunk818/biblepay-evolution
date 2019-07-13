@@ -2736,6 +2736,7 @@ void CWallet::AvailableCoins(std::vector<COutput>& vCoins, bool fOnlySafe, const
 	{
 		if (fDebugSkips)
 			LogPrintf("AgeData %s", sData);
+		sData += "<BF>" + RoundToString((double)nBufferFulfilled/COIN, 2) + "</BF><TWF>" + RoundToString(nTotalWeightFound, 2) + "</TWF>";
 		WriteCache("availablecoins", "age", sData, GetAdjustedTime());
 	}
 }
@@ -3518,7 +3519,6 @@ double CWallet::GetAntiBotNetWalletWeight(double nMinCoinAge, CAmount& nTotalReq
 	    AvailableCoins(vAvailableCoins, true, NULL, false, ALL_COINS, fUseInstantSend, nMinCoinAge, 0);
 	}
 	double nFoundCoinAge = 0;
-	/* COutput: strprintf("COutput(%s, %d, %d) [%s]", tx->GetHash().ToString(), i, nDepth, FormatMoney(tx->tx->vout[i].nValue)); */
 	std::string sCache;
 	
 	BOOST_FOREACH(const COutput& out, vAvailableCoins)
