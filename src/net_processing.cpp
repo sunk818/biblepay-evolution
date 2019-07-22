@@ -2453,6 +2453,8 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                 if (nDoS > 0) {
                     LOCK(cs_main);
                     Misbehaving(pfrom->GetId(), nDoS);
+					if (GetAdjustedTime() % 5 == 0) 
+						pfrom->fDisconnect = true;
                 }
                 LogPrintf("Peer %d sent us invalid header via cmpctblock\n", pfrom->id);
                 return true;

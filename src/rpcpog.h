@@ -207,5 +207,8 @@ void SpendABN();
 double AddVector(std::string sData, std::string sDelim);
 int ReassessAllChains();
 double GetFees(CTransactionRef tx);
+int64_t GetCacheEntryAge(std::string sSection, std::string sKey);
+void LogPrintWithTimeLimit(std::string sSection, std::string sValue, int64_t nMaxAgeInSeconds);
+
 
 #endif

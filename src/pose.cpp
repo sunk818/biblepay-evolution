@@ -73,9 +73,7 @@ void ThreadPOSE(CConnman& connman)
 	    if (ShutdownRequested())
 			return;
 
-		// CRITICAL TODO: During release, remove && false
-
-		bool bImpossible = (!masternodeSync.IsSynced() || fLiteMode || (!fMasternodeMode && false));
+		bool bImpossible = (!masternodeSync.IsSynced() || fLiteMode || (!fMasternodeMode));
 		if (bImpossible)
 		{
 			MilliSleep(60000);

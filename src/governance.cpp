@@ -353,7 +353,8 @@ void CGovernanceManager::AddGovernanceObject(CGovernanceObject& govobj, CConnman
         }
     }
 
-    LogPrintf("CGovernanceManager::AddGovernanceObject -- %s new, received from %s\n", strHash, pfrom ? pfrom->GetAddrName() : "nullptr");
+	if (fDebugSpam)
+		LogPrintf("CGovernanceManager::AddGovernanceObject -- %s new, received from %s\n", strHash, pfrom ? pfrom->GetAddrName() : "nullptr");
     govobj.Relay(connman);
 
     // Update the rate buffer
@@ -671,8 +672,8 @@ void CGovernanceManager::SyncSingleObjVotes(CNode* pnode, const uint256& nProp, 
 
     if (govobj.IsSetCachedDelete() || govobj.IsSetExpired()) 
 	{
-        LogPrintf("CGovernanceManager::%s -- not syncing deleted/expired govobj: %s, peer=%d\n", __func__,
-            strHash, pnode->id);
+		if (fDebugSpam)
+			LogPrintf("CGovernanceManager::%s -- not syncing deleted/expired govobj: %s, peer=%d\n", __func__, strHash, pnode->id);
         return;
     }
 

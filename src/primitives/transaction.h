@@ -344,7 +344,16 @@ public:
 		std::string sMyData = GetTxMessage();
 		return (sMyData.find("<MT>GSCTransmission") != std::string::npos);
 	}
-	
+
+	std::string GetCampaignName() const
+	{
+		std::string sData = GetTxMessage();
+		std::string sCampaign = ExtractXMLValue(sData, "<gsccampaign>", "</gsccampaign>");
+		if (sCampaign.empty()) 
+			sCampaign = "Unknown";
+		return sCampaign;
+	}
+
 	bool IsCPKAssociation() const
 	{
 		// Is this a Christian Public Keypair association tx?

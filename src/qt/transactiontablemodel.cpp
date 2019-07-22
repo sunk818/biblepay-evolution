@@ -478,6 +478,8 @@ QString TransactionTableModel::formatTxToAddress(const TransactionRecord *wtx, b
     case TransactionRecord::SendToOther:
         return QString::fromStdString(wtx->address) + watchAddress;
     case TransactionRecord::SendToSelf:
+	case TransactionRecord::GSCTransmission:
+        return QString::fromStdString(wallet->mapWallet[wtx->hash].tx->GetCampaignName());
     default:
         return tr("(n/a)") + watchAddress;
     }

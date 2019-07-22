@@ -117,6 +117,7 @@ std::map<uint256, int64_t> mapRejectedBlocks GUARDED_BY(cs_main);
 std::map<std::pair<std::string, std::string>, std::pair<std::string, int64_t>> mvApplicationCache;
 std::map<std::string, POSEScore> mvPOSEScore;
 std::string msGithubVersion;
+std::string msSessionID;
 std::string sOS;
 int PRAYER_MODULUS = 0;
 int miGlobalPrayerIndex = 0;
@@ -3514,8 +3515,15 @@ bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationState& sta
 		unsigned int nwr = GetNextWorkRequired(pindexPrev, &block, consensusParams);
 		if ((nHeight > 0 && nHeight < 5) || nHeight == 33441) 
 			return true; // We adjusted something in DGW during this time
-		LogPrintf("\nContextualCheckBlockHeader::FAILED incorrect proof of work at %d, block.nbits %f, next work %f", nHeight, (double)block.nBits, (double)nwr);
-		return state.DoS(100, false, REJECT_INVALID, "bad-diffbits", false, strprintf("incorrect proof of work at %d, block.nbits %f, next work %f", nHeight, (double)block.nBits, (double)nwr));
+		if (!state.fDontLog)
+		{
+			LogPrintf("\nContextualCheckBlockHeader::FAILED incorrect proof of work at %d, block.nbits %f, next work %f", nHeight, (double)block.nBits, (double)nwr);
+			return state.DoS(100, false, REJECT_INVALID, "bad-diffbits", false, strprintf("incorrect proof of work at %d, block.nbits %f, next work %f", nHeight, (double)block.nBits, (double)nwr));
+		}
+		else
+		{
+			return false;
+		}
 	}
     
     // Check timestamp against prev
@@ -3906,7 +3914,7 @@ bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<cons
 	return true;
 }
 
-bool TestBlockValidityLite(CValidationState& state, const CChainParams& chainparams, const CBlock& block, CBlockIndex* pindexPrev, bool fCheckPOW, bool fCheckMerkleRoot, bool fMining)
+bool TestBlockValidityLite(CValidationState& state, const CChainParams& chainparams, const CBlock& block, CBlockIndex* pindexPrev, bool fCheckPOW, bool fCheckMerkleRoot, bool fMining, bool fLog)
 {
     AssertLockHeld(cs_main);
 	// The following line of code can crash the entire node.
@@ -3916,13 +3924,32 @@ bool TestBlockValidityLite(CValidationState& state, const CChainParams& chainpar
  	if (pindexPrev != chainActive.Tip()) 
 		return false;
 
- 	// NOTE: CheckBlockHeader is called by CheckBlock
+ 	// ContextualCheckBlockHeader checks the diff-bits; 
+	// this could be unintentionally bad if the miner received a stale block from the pool, so we set the fDontLog flag here, and this will also not trigger a d-dos
+	if (!fLog)
+		state.fDontLog = true;
+	
 	if (!ContextualCheckBlockHeader(block, state, chainparams.GetConsensus(), pindexPrev, GetAdjustedTime()))
-		return error("%s: Consensus::ContextualCheckBlockHeader: %s", __func__, FormatStateMessage(state));
-	if (!CheckBlock(block, state, chainparams.GetConsensus(), fCheckPOW, fCheckMerkleRoot))
-		return error("%s: Consensus::CheckBlock: %s", __func__, FormatStateMessage(state));
-	if (!ContextualCheckBlock(block, state, chainparams.GetConsensus(), pindexPrev, fMining))
-		return error("%s: Consensus::ContextualCheckBlock: %s", __func__, FormatStateMessage(state));
+	{
+		std::string sErr = "TestBlockValidityLite " + FormatStateMessage(state);
+		if (fLog)
+			LogPrintWithTimeLimit("Consensus::ContextualCheckBlockHeader", sErr, 60 * 10);
+		return false;
+	}
+	else if (!CheckBlock(block, state, chainparams.GetConsensus(), fCheckPOW, fCheckMerkleRoot))
+	{
+		std::string sErr = "TestBlockValidityLite " + FormatStateMessage(state);
+		if (fLog)
+			LogPrintWithTimeLimit("Consensus::CheckBlock", sErr, 60 * 10);
+		return false;
+	}
+	else if (!ContextualCheckBlock(block, state, chainparams.GetConsensus(), pindexPrev, fMining))
+	{
+		std::string sErr = "TestBlockValidityLite " + FormatStateMessage(state);
+		if (fLog)
+			LogPrintWithTimeLimit("Consensus::ContextualCheckBlock", sErr, 60 * 10);
+		return false;
+	}
 
  	return true;
 }

@@ -33,6 +33,8 @@ static const int MAX_SCRIPT_SIZE = 10000;
 // Threshold for nLockTime: below this value it is interpreted as block number,
 // otherwise as UNIX timestamp.
 static const unsigned int LOCKTIME_THRESHOLD = 500000000; // Tue Nov  5 00:53:20 1985 UTC
+// BiblePay
+std::string ExtractXMLValue(std::string XMLdata, std::string key, std::string key_end);
 
 template <typename T>
 std::vector<unsigned char> ToByteVector(const T& in)
