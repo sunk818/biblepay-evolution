@@ -111,7 +111,7 @@ static CBlock FindDevNetGenesisBlock(const Consensus::Params& params, const CBlo
 static Consensus::LLMQParams llmq5_60 = {
         .type = Consensus::LLMQ_5_60,
         .name = "llmq_5_60",
-        .size = 5,
+        .size = 3,
         .minSize = 3,
         .threshold = 3,
 
@@ -129,11 +129,11 @@ static Consensus::LLMQParams llmq5_60 = {
 static Consensus::LLMQParams llmq50_60 = {
         .type = Consensus::LLMQ_50_60,
         .name = "llmq_50_60",
-        .size = 50,
+        .size = 7,
         .minSize = 40,
         .threshold = 30,
 
-        .dkgInterval = 24, // one DKG per hour
+        .dkgInterval = 24, // one DKG per 3 hours
         .dkgPhaseBlocks = 2,
         .dkgMiningWindowStart = 10, // dkgPhaseBlocks * 5 = after finalization
         .dkgMiningWindowEnd = 18,
@@ -147,11 +147,11 @@ static Consensus::LLMQParams llmq50_60 = {
 static Consensus::LLMQParams llmq400_60 = {
         .type = Consensus::LLMQ_400_60,
         .name = "llmq_400_60",
-        .size = 400,
+        .size = 30,
         .minSize = 300,
         .threshold = 240,
 
-        .dkgInterval = 24 * 12, // one DKG every 12 hours
+        .dkgInterval = 102, // one DKG every 12 hours
         .dkgPhaseBlocks = 4,
         .dkgMiningWindowStart = 20, // dkgPhaseBlocks * 5 = after finalization
         .dkgMiningWindowEnd = 28,
@@ -166,11 +166,11 @@ static Consensus::LLMQParams llmq400_60 = {
 static Consensus::LLMQParams llmq400_85 = {
         .type = Consensus::LLMQ_400_85,
         .name = "llmq_400_85",
-        .size = 400,
+        .size = 30,
         .minSize = 350,
         .threshold = 340,
 
-        .dkgInterval = 24 * 24, // one DKG every 24 hours
+        .dkgInterval = 205, // one DKG every 24 hours
         .dkgPhaseBlocks = 4,
         .dkgMiningWindowStart = 20, // dkgPhaseBlocks * 5 = after finalization
         .dkgMiningWindowEnd = 48, // give it a larger mining window to make sure it is mined

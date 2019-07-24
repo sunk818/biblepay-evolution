@@ -1379,6 +1379,13 @@ UniValue getblockchaininfo(const JSONRPCRequest& request)
     softforks.push_back(SoftForkDesc("bip34", 2, tip, consensusParams));
     softforks.push_back(SoftForkDesc("bip66", 3, tip, consensusParams));
     softforks.push_back(SoftForkDesc("bip65", 4, tip, consensusParams));
+
+	bool fDIP0008Active = VersionBitsState(chainActive.Tip()->pprev, Params().GetConsensus(), Consensus::DEPLOYMENT_DIP0008, versionbitscache) == THRESHOLD_ACTIVE;
+	bool fChainLocksActive = sporkManager.IsSporkActive(SPORK_19_CHAINLOCKS_ENABLED);
+
+	obj.push_back(Pair("dip0008active", fDIP0008Active));
+	obj.push_back(Pair("chainlocks_active", fChainLocksActive));
+
 	/*
 	DEPLOYMENT_CSV is a blockchain vote to store the <median time past> int64_t unixtime in the block.tx.nLockTime field.  Since the bitcoin behavior is to store the height, and we have pre-existing business logic that calculates height delta from this field, we don't want to switch to THRESHOLD_ACTIVE here.  Additionally, BiblePay enforces the allowable mining window (for block timestamps) to be within a 15 minute range.
 	If we ever want to enable DEPLOYMENT_CSV, we need to change the chainparam deployment window to be the future, and check the POG business logic for height delta calculations.
@@ -1979,7 +1986,7 @@ UniValue exec(const JSONRPCRequest& request)
 			results.push_back(Pair("quorum_gobject_trigger_hash", sGobjectHash));
 			results.push_back(Pair("quorum_error", sError));
 		}
-		results.push_back(Pair("protocol_version", PROTOCOL_VERSION));
+		results.push_back(Pair("gsc_protocol_version", PROTOCOL_VERSION));
 		double nMinGSCProtocolVersion = GetSporkDouble("MIN_GSC_PROTO_VERSION", 0);
 		bool bVersionSufficient = (PROTOCOL_VERSION >= nMinGSCProtocolVersion);
 		results.push_back(Pair("min_gsc_proto_version", nMinGSCProtocolVersion));
@@ -2650,8 +2657,18 @@ UniValue exec(const JSONRPCRequest& request)
 		UniValue p = GetProminenceLevels(nHeight + BLOCKS_PER_DAY, false);
 		std::string sData1 = ReadCache("analysis", "data_1");
 		std::string sData2 = ReadCache("analysis", "data_2");
-		results.push_back(Pair("Totals", sData2));
-		std::vector<std::string> v = Split(sData1.c_str(), "\n");
+		results.push_back(Pair("Campaign", "Totals"));
+
+		std::vector<std::string> v = Split(sData2.c_str(), "\n");
+		for (int i = 0; i < (int)v.size(); i++)
+		{
+			std::string sRow = v[i];
+			results.push_back(Pair(RoundToString(i, 0), sRow));
+		}
+
+		results.push_back(Pair("Campaign", "Points"));
+
+		v = Split(sData1.c_str(), "\n");
 		for (int i = 0; i < (int)v.size(); i++)
 		{
 			std::string sRow = v[i];
