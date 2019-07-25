@@ -157,6 +157,11 @@ void CFinalCommitmentTxPayload::ToJson(UniValue& obj) const
 
 bool CheckLLMQCommitment(const CTransaction& tx, const CBlockIndex* pindexPrev, CValidationState& state)
 {
+
+	bool fLLMQActive = pindexPrev->nHeight >= Params().GetConsensus().LLMQHeight;
+	if (!fLLMQActive) 
+		return true;
+	
     CFinalCommitmentTxPayload qcTx;
     if (!GetTxPayload(tx, qcTx)) {
         return state.DoS(100, false, REJECT_INVALID, "bad-qc-payload");

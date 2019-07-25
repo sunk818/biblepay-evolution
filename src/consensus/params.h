@@ -173,6 +173,7 @@ struct Params {
     int DIP0003EnforcementHeight;
     uint256 DIP0003EnforcementHash;
 	int DIP0003HeightPhase2;
+	int LLMQHeight;
 
     /**
      * Minimum blocks including miner confirmation of the total of nMinerConfirmationWindow blocks in a retargeting period,

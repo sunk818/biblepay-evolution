@@ -26,6 +26,11 @@ bool CheckSpecialTx(const CTransaction& tx, const CBlockIndex* pindexPrev, CVali
     if (fCheckPreDip3Blocks && pindexPrev && pindexPrev->nHeight + 1 < Params().GetConsensus().DIP0003Height) {
         return state.DoS(10, false, REJECT_INVALID, "bad-tx-type");
     }
+	
+	bool fDIP0003Active = pindexPrev->nHeight >= Params().GetConsensus().DIP0003Height;
+
+	if (!fDIP0003Active) 
+		return true;
 
     switch (tx.nType) {
     case TRANSACTION_PROVIDER_REGISTER:
