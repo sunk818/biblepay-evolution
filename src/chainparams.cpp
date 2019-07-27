@@ -111,7 +111,7 @@ static CBlock FindDevNetGenesisBlock(const Consensus::Params& params, const CBlo
 static Consensus::LLMQParams llmq5_60 = {
         .type = Consensus::LLMQ_5_60,
         .name = "llmq_5_60",
-        .size = 2,
+        .size = 3,
         .minSize = 2,
         .threshold = 2,
 
@@ -434,7 +434,7 @@ public:
 		consensus.DIP0003Height = 64960; 
 		consensus.DIP0003EnforcementHeight = 120000;
 		consensus.DIP0003HeightPhase2 = 120000;
-		consensus.LLMQHeight = 170000;
+		consensus.LLMQHeight = 175000;
 
         consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); 
         consensus.nPowTargetTimespan = 24 * 60 * 60; // Biblepay: 1 day
@@ -525,11 +525,11 @@ public:
         nExtCoinType = 1;
 
         // long living quorum params
+	    consensus.llmqs[Consensus::LLMQ_5_60] = llmq5_60;
         consensus.llmqs[Consensus::LLMQ_50_60] = llmq50_60;
-        consensus.llmqs[Consensus::LLMQ_400_60] = llmq400_60;
-        consensus.llmqs[Consensus::LLMQ_400_85] = llmq400_85;
-        consensus.llmqChainLocks = Consensus::LLMQ_50_60;
-        consensus.llmqForInstantSend = Consensus::LLMQ_50_60;
+
+		consensus.llmqChainLocks = Consensus::LLMQ_5_60;
+        consensus.llmqForInstantSend = Consensus::LLMQ_5_60;
 
         fMiningRequiresPeers = false;
         fDefaultConsistencyChecks = false;
