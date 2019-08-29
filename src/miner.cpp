@@ -963,17 +963,19 @@ recover:
 
         while (true) 
 		{
-            if (chainparams.MiningRequiresPeers()) 
+            if (chainparams.MiningRequiresPeers() || fReindex)
 			{
                 // Busy-wait for the network to come online so we don't waste time mining
                 // on an obsolete chain. In regtest mode we expect to fly solo.
                 while(true)
 				{
-		            if (PeersExist() && !IsInitialBlockDownload() && masternodeSync.IsSynced()) 
+		            if (PeersExist() && !IsInitialBlockDownload() && masternodeSync.IsSynced() && !fReindex)
 						break;
 					if (dJackrabbitStart == 1) 
 						break;
+                    
                     MilliSleep(1000);
+                    
                 } 
             }
 
