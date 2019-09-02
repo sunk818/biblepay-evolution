@@ -949,7 +949,10 @@ std::string StoreBusinessObject(UniValue& oBusinessObject, std::string& sError)
 
 int64_t GetFileSize(std::string sPath)
 {
-	if (!boost::filesystem::exists(sPath)) return 0;
+	if (!boost::filesystem::exists(sPath)) 
+		return 0;
+	if (!boost::filesystem::is_regular_file(sPath))
+		return 0;
 	return (int64_t)boost::filesystem::file_size(sPath);
 }
 
@@ -1675,7 +1678,7 @@ void MemorizeBlockChainPrayers(bool fDuringConnectBlock, bool fSubThread, bool f
 		LogPrintf("Memorizing prayers tip height %f @ time %f deserialized height %f ", chainActive.Tip()->nHeight, GetAdjustedTime(), nDeserializedHeight);
 
 	int nMaxDepth = chainActive.Tip()->nHeight;
-	int nMinDepth = fDuringConnectBlock ? nMaxDepth - 2 : nMaxDepth - (BLOCKS_PER_DAY * 30 * 12);  // One year
+	int nMinDepth = fDuringConnectBlock ? nMaxDepth - 2 : nMaxDepth - (BLOCKS_PER_DAY * 30 * 12 * 7);  // Seven years
 	if (fDuringSanctuaryQuorum) nMinDepth = nMaxDepth - (BLOCKS_PER_DAY * 14); // Two Weeks
 	if (nDeserializedHeight > 0 && nDeserializedHeight < nMaxDepth) nMinDepth = nDeserializedHeight;
 	if (nMinDepth < 0) nMinDepth = 0;
@@ -1683,8 +1686,11 @@ void MemorizeBlockChainPrayers(bool fDuringConnectBlock, bool fSubThread, bool f
 	const Consensus::Params& consensusParams = Params().GetConsensus();
 	while (pindex && pindex->nHeight < nMaxDepth)
 	{
-		if (pindex) if (pindex->nHeight < chainActive.Tip()->nHeight) pindex = chainActive.Next(pindex);
-		if (!pindex) break;
+		if (pindex) 
+			if (pindex->nHeight < chainActive.Tip()->nHeight)
+				pindex = chainActive.Next(pindex);
+		if (!pindex)
+			break;
 		CBlock block;
 		if (ReadBlockFromDisk(block, pindex, consensusParams)) 
 		{
@@ -1905,7 +1911,7 @@ std::string BiblepayHTTPSPost(bool bPost, int iThreadID, std::string sActionName
 		}
 		bio = BIO_new_ssl_connect(ctx);
 		std::string sDomain = GetDomainFromURL(sBaseURL);
-		std::string sDomainWithPort = sDomain + ":" + "443";
+		std::string sDomainWithPort = sDomain + ":" + RoundToString(iPort, 0);
 		BIO_set_conn_hostname(bio, sDomainWithPort.c_str());
 		if(BIO_do_connect(bio) <= 0)
 		{
@@ -2169,6 +2175,32 @@ std::string GetCPKData(std::string sProjectId, std::string sPK)
 bool AdvertiseChristianPublicKeypair(std::string sProjectId, std::string sNickName, std::string sEmail, std::string sVendorType, bool fUnJoin, bool fForce, CAmount nFee, std::string sOptData, std::string &sError)
 {	
 	std::string sCPK = DefaultRecAddress("Christian-Public-Key");
+
+	boost::to_lower(sProjectId);
+
+ 	if (sProjectId == "cpk-bmsuser")
+	{
+		sCPK = DefaultRecAddress("PUBLIC-FUNDING-ADDRESS");
+		bool fExists = NickNameExists(sProjectId, sNickName);
+		if (fExists && false) 
+		{
+			sError = "Sorry, BMS Nick Name is already taken.";
+			return false;
+		}
+	}
+	else
+	{
+		if (!sNickName.empty())
+		{
+			bool fExists = NickNameExists("cpk", sNickName);
+			if (fExists) 
+			{
+				sError = "Sorry, NickName is already taken.";
+				return false;
+			}
+		}
+	}
+
 	std::string sRec = GetCPKData(sProjectId, sCPK);
 	if (fUnJoin)
 	{
@@ -2183,17 +2215,7 @@ bool AdvertiseChristianPublicKeypair(std::string sProjectId, std::string sNickNa
 		return false;
     }
 
-	if (!sNickName.empty())
-	{
-		bool fExists = NickNameExists(sNickName);
-		if (fExists) 
-		{
-			sError = "Sorry, NickName is already taken.";
-			return false;
-		}
-	}
-
-	if (sNickName.length() > 10 && sVendorType.empty())
+	if (sNickName.length() > 20 && sVendorType.empty())
 	{
 		sError = "Sorry, nickname length must be 10 characters or less.";
 		return false;
@@ -2733,3 +2755,139 @@ void LogPrintWithTimeLimit(std::string sSection, std::string sValue, int64_t nMa
 	LogPrintf("%s::%s", sSection, sValue);
 	WriteCache(sSection, sValue, sValue, GetAdjustedTime());
 }
+
+
+std::vector<std::string> GetVectorOfFilesInDirectory(const std::string &dirPath, const std::vector<std::string> dirSkipList = { })
+{
+	std::vector<std::string> listOfFiles;
+	boost::system::error_code ec;
+
+	try {
+		if (boost::filesystem::exists(dirPath) && boost::filesystem::is_directory(dirPath))
+		{
+			boost::filesystem::recursive_directory_iterator iter(dirPath);
+ 			boost::filesystem::recursive_directory_iterator end;
+ 			while (iter != end)
+			{
+				if (boost::filesystem::is_directory(iter->path()) &&
+						(std::find(dirSkipList.begin(), dirSkipList.end(), iter->path().filename()) != dirSkipList.end()))
+				{
+					iter.no_push();
+				}
+				else
+				{
+					listOfFiles.push_back(iter->path().string());
+				}
+				iter.increment(ec);
+				if (ec) 
+				{
+					std::cerr << "Error While Accessing : " << iter->path().string() << " :: " << ec.message() << '\n';
+				}
+			}
+		}
+	}
+	catch (std::system_error & e)
+	{
+		std::cerr << "Exception :: " << e.what();
+	}
+	return listOfFiles;
+}
+
+std::string GetAttachmentData(std::string sPath)
+{
+	if (sPath.empty())
+		return "";
+
+	if (GetFileSize(sPath) == 0)
+		return "";
+	std::vector<char> v = ReadBytesAll(sPath.c_str());
+	std::vector<unsigned char> uData(v.begin(), v.end());
+	std::string s64 = EncodeBase64(&uData[0], uData.size());
+	return s64;
+}
+
+std::string BIPFS_UploadSingleFile(std::string sPath, std::string sWebPath)
+{
+	// Create BIPFS ChristianObject
+	UniValue u(UniValue::VOBJ);
+	std::string sCPK = DefaultRecAddress("CHRISTIAN-PUBLIC-KEYPAIR");
+	u.push_back(Pair("CPK", sCPK));
+	u.push_back(Pair("Source", sPath));
+	u.push_back(Pair("Added",  TimestampToHRDate(GetAdjustedTime())));
+	u.push_back(Pair("Timestamp", RoundToString(GetAdjustedTime(), 0)));
+	u.push_back(Pair("WebPath", sWebPath));
+	u.push_back(Pair("TableName", "bipfs"));
+	std::string sAttachment = GetAttachmentData(sPath);
+	if (!sAttachment.empty())
+	{
+		std::string sXML = "<attachmentdata>" + sAttachment + "</attachmentdata>";
+		sXML += "<webpath>" + sWebPath + "</webpath>";
+		std::string sURL = "https://web.biblepay.org";
+		std::string sRestfulURL = "BMS/SubmitChristianObject";
+		std::string sJson = u.write().c_str();
+		std::string sPayload = "<jsondata>" + sJson + "</jsondata>" + sXML;
+		int iTimeout = 25;
+		std::string sResponse = BiblepayHTTPSPost(false, 0, "", "", sPayload, sURL, sRestfulURL, 5000, "", iTimeout, 10000, 1);
+		return sResponse;
+	}
+	else
+	{
+		return "Empty File/Folder " + sPath;
+	}
+}
+
+std::string DSQL_Ansi92Query(std::string sSQL)
+{
+	std::string sURL = "https://web.biblepay.org";
+	std::string sRestfulURL = "BMS/JsonSqlQuery";
+	int iTimeout = 30;
+	std::string sResponse = BiblepayHTTPSPost(false, 0, "", "", sSQL, sURL, sRestfulURL, 5000, "", iTimeout, 10000, 1);
+	return sResponse;
+}
+
+std::string Path_Combine(std::string sPath, std::string sFileName)
+{
+	if (sFileName.empty())
+		return "";
+	std::string sDelimiter = "/";
+	if (sFileName.substr(0,1) == sDelimiter)
+		sFileName = sFileName.substr(1, sFileName.length() - 1);
+	std::string sFullPath = sPath + sDelimiter + sFileName;
+	return sFullPath;
+}
+
+double GetROI(double nTitheAmount)
+{
+	// For a given Tithe Amount, return the conceptual ROI
+	const Consensus::Params& consensusParams = Params().GetConsensus();
+	int iNextSuperblock = 0;
+	int iLastSuperblock = GetLastGSCSuperblockHeight(chainActive.Tip()->nHeight, iNextSuperblock);
+	CAmount nPaymentsLimit = CSuperblock::GetPaymentsLimit(iLastSuperblock);
+	nPaymentsLimit -= MAX_BLOCK_SUBSIDY * COIN;
+	std::string sContract = GetGSCContract(iLastSuperblock, false);
+	std::string sData = ExtractXML(sContract, "<DATA>", "</DATA>");
+	std::vector<std::string> vData = Split(sData.c_str(), "\n");
+	double dTotalPaid = 0;
+	double nTotalPoints = 0;
+	for (int i = 0; i < vData.size(); i++)
+	{
+		std::vector<std::string> vRow = Split(vData[i].c_str(), "|");
+		if (vRow.size() >= 6)
+		{
+			double nPoints = cdbl(vRow[2], 2);
+			double nProminence = cdbl(vRow[3], 4) * 100;
+			double nPayment = cdbl(vRow[5], 4);
+			CAmount nOwed = nPaymentsLimit * (nProminence / 100);
+			dTotalPaid += nPayment;
+			nTotalPoints += nPoints;
+		}
+	}
+
+ 	double dPPP = dTotalPaid / nTotalPoints;
+	CAmount nTotalReq;
+	double dCoinAge = pwalletMain->GetAntiBotNetWalletWeight(0, nTotalReq);
+	double nPoints = cbrt(nTitheAmount) * dCoinAge;
+	double nEarned = (dPPP * nPoints) - nTitheAmount;
+	double nROI = (nEarned / nTitheAmount) * 100;
+	return nROI;
+} 

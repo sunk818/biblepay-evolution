@@ -213,17 +213,6 @@ void CMasternode::Check(bool fForce)
         }
     }
 
-	POSEScore p = GetPOSEScore(addr.ToString());
-	if (p.nTries > POSE_BAN_MIN_TRIES && p.nScore < POSE_BAN_THRESHHOLD && nActiveState != MASTERNODE_POSE_BAN)
-	{
-		// Watchman-on-the-wall Ping Status - Expired
-	    nActiveState = MASTERNODE_POSE_BAN;
-        // Ban for the whole payment cycle
-        nPoSeBanHeight = nHeight + mnodeman.size();
-        LogPrintf("CMasternode::Check::PoseBan -- MasternodePose %s is banned till block %d now\n", outpoint.ToStringShort(), nPoSeBanHeight);
-        return;
-    }
-
     // don't expire if we are still in "waiting for ping" mode unless it's our own masternode
     if(!fWaitForPing || fOurMasternode) 
 	{

@@ -541,7 +541,7 @@ public:
 
         nPoolMinParticipants = 3;
         nPoolMaxParticipants = 5;
-        nFulfilledRequestExpireTime = 5*60; // fulfilled requests expire in 5 minutes
+        nFulfilledRequestExpireTime = 5 * 60; // fulfilled requests expire in 5 minutes
 
         vSporkAddresses = {"yTrEKf8XQ7y7tychC2gWuGw1hsLqBybnEN"};
         nMinSporkKeys = 1;

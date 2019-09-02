@@ -1022,6 +1022,9 @@ recover:
 				}
 			}
 
+			if (!fProd && mempool.size() == 0 && GetSporkDouble("SLEEP_DURING_EMPTY_BLOCKS", 0) == 1)
+                MilliSleep(1000 * 60 * 7);
+           
 			// Create Evo block
 			bool fFunded = !sBlockData.empty();
 

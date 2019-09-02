@@ -1944,11 +1944,65 @@ UniValue exec(const JSONRPCRequest& request)
 			results.push_back(Pair(sBookName, sReversed));
 		}
 	}
-	else if (sItem == "ipfstest1")
+	else if (sItem == "dsql_select")
 	{
-		std::string sResult = BiblePayHTTPSPost2(true, "5001", "192.168.0.153", "BiblePayGui/Welcome", "na", "gear.png");
-		results.push_back(Pair("result", sResult));
+		if (request.params.size() != 2)
+			throw std::runtime_error("You must specify dsql_select \"query\".");
+		std::string sSQL = request.params[1].get_str();
+		std::string sJson = DSQL_Ansi92Query(sSQL);
+		UniValue u(UniValue::VOBJ);
+		u.read(sJson);
+		std::string sSerialized = u.write().c_str();
+		results.push_back(Pair("dsql_query", sJson));
 	}
+	else if (sItem == "bipfs_file")
+	{
+		if (request.params.size() != 3)
+			throw std::runtime_error("You must specify exec bipfs_file path webpath.  IE: exec bipfs_file armageddon.jpg mycpk/armageddon.jpg");
+		std::string sPath = request.params[1].get_str();
+		std::string sWebPath = request.params[2].get_str();
+		std::string sResponse = BIPFS_UploadSingleFile(sPath, sWebPath);
+		std::string sFee = ExtractXML(sResponse, "<FEE>", "</FEE>");
+		std::string sErrors = ExtractXML(sResponse, "<ERRORS>", "</ERRORS>");
+		std::string sSize = ExtractXML(sResponse, "<SIZE>", "</SIZE>");
+
+		results.push_back(Pair("Fee", sFee));
+		results.push_back(Pair("Size", sSize));
+		results.push_back(Pair("Errors", sErrors));
+	}
+	else if (sItem == "bipfs_folder")
+	{
+		if (request.params.size() != 3)
+			throw std::runtime_error("You must specify exec bipfs_folder path webpath.  IE: exec bipfs_folder foldername mycpk/mywebpath");
+		std::string sDirPath = request.params[1].get_str();
+		std::string sWebPath = request.params[2].get_str();
+		std::vector<std::string> skipList;
+		std::vector<std::string> g = GetVectorOfFilesInDirectory(sDirPath, skipList);
+		for (auto sFileName : g)
+		{
+			results.push_back(Pair("Processing File", sFileName));
+			std::string sRelativeFileName = strReplace(sFileName, sDirPath, "");
+
+			std::string sFullWebPath = Path_Combine(sWebPath, sRelativeFileName);
+			std::string sFullSourcePath = Path_Combine(sDirPath, sFileName);
+
+			LogPrintf("Iterated Filename %s, RelativeFile %s, FullWebPath %s", 
+				sFileName.c_str(), sRelativeFileName.c_str(), sFullWebPath.c_str());
+
+			std::string sResponse = BIPFS_UploadSingleFile(sFullSourcePath, sFullWebPath);
+			results.push_back(Pair("SourcePath", sFullSourcePath));
+
+			results.push_back(Pair("FileName", sFileName));
+			results.push_back(Pair("WebPath", sFullWebPath));
+			std::string sFee = ExtractXML(sResponse, "<FEE>", "</FEE>");
+			std::string sErrors = ExtractXML(sResponse, "<ERRORS>", "</ERRORS>");
+			std::string sSize = ExtractXML(sResponse, "<SIZE>", "</SIZE>");
+			results.push_back(Pair("Fee", sFee));
+			results.push_back(Pair("Size", sSize));
+			results.push_back(Pair("Errors", sErrors));
+		}
+	}
+
 	else if (sItem == "testgscvote")
 	{
 		int iNextSuperblock = 0;
@@ -2313,16 +2367,33 @@ UniValue exec(const JSONRPCRequest& request)
 		if (!fAdv)
 			results.push_back(Pair("Error", sError));
 	}
-	else if (sItem == "join")
+	else if (sItem == "register")
 	{
 		if (request.params.size() != 2)
-			throw std::runtime_error("You must specify the project_name.");
+			throw std::runtime_error("The purpose of this command is to register your nickname with BMS (the decentralized biblepay web).  This feature will not be available until December 2019.  \nYou must specify your nickname.");
+		std::string sProject = "cpk-bmsuser";
+		std::string sNN;
+		sNN = request.params[1].get_str();
+		boost::to_lower(sProject);
+		std::string sError;
+		bool fAdv = AdvertiseChristianPublicKeypair(sProject, "", sNN, "", false, true, 0, "", sError);
+		results.push_back(Pair("Results", fAdv));
+		if (!fAdv)
+			results.push_back(Pair("Error", sError));
+	}
+	else if (sItem == "join")
+	{
+		if (request.params.size() != 2 && request.params.size() != 3)
+			throw std::runtime_error("You must specify the project_name.  Optionally specify your nickname or sanctuary IP address.");
 		std::string sProject = request.params[1].get_str();
+		std::string sOptData;
+		if (request.params.size() > 2)
+			sOptData = request.params[2].get_str();
 		boost::to_lower(sProject);
 		std::string sError;
 		if (!CheckCampaign(sProject))
 			throw std::runtime_error("Campaign does not exist.");
-		bool fAdv = AdvertiseChristianPublicKeypair("cpk-" + sProject, "", "", "", false, false, 0, "", sError);
+		bool fAdv = AdvertiseChristianPublicKeypair("cpk-" + sProject, "", sOptData, "", false, false, 0, "", sError);
 		results.push_back(Pair("Results", fAdv));
 		if (!fAdv)
 			results.push_back(Pair("Error", sError));
@@ -2367,24 +2438,6 @@ UniValue exec(const JSONRPCRequest& request)
 		{
 			results.push_back(Pair("TXID", sTxId));
 		}
-	}
-	else if (sItem == "sendgscc")
-	{
-		if (request.params.size() > 2)
-			throw std::runtime_error("You must specify sendgscc [diary_entry]: IE 'exec sendgscc [prayed for Jane Doe who had broken ribs, this happened].");
-		std::string sDiary;
-		if (request.params.size() > 1)
-		{
-			sDiary = request.params[1].get_str();
-			if (sDiary.length() < 10)
-				throw std::runtime_error("Diary entry incomplete (must be 10 chars or more).");
-		}
-		
-		std::string sError;
-		bool fCreated = CreateClientSideTransaction(true, false, sDiary, sError);
-		if (!sError.empty())
-			results.push_back(Pair("Error!", sError));
-
 	}
 	else if (sItem == "health")
 	{
@@ -2772,6 +2825,60 @@ UniValue exec(const JSONRPCRequest& request)
 		std::string sChildID = request.params[1].get_str();	
 		double dBal = GetCameroonChildBalance(sChildID);	
 		results.push_back(Pair("Balance", dBal));	
+	}
+	else if (sItem == "cleantips")
+	{
+		if (chainActive.Tip()->nHeight < 2000)
+			throw JSONRPCError(RPC_TYPE_ERROR, "Please sync first.");
+	    std::set<const CBlockIndex*, CompareBlocksByHeight> setTips;
+
+		BOOST_FOREACH(const PAIRTYPE(const uint256, CBlockIndex*)& item, mapBlockIndex)
+		{
+			if (item.second != NULL) setTips.insert(item.second);
+		}
+		BOOST_FOREACH(const PAIRTYPE(const uint256, CBlockIndex*)& item, mapBlockIndex)
+		{
+			if (item.second != NULL)
+			{
+				if (item.second->pprev != NULL)
+				{
+					const CBlockIndex* pprev = item.second->pprev;
+					if (pprev)
+						setTips.erase(pprev);
+				}
+			}
+		}
+
+
+	    BOOST_FOREACH(const CBlockIndex* block, setTips)
+		{
+			if (block->nHeight < (chainActive.Tip()->nHeight - 1000))
+			{
+		        const CBlockIndex* pindexFork = chainActive.FindFork(block);
+
+				const CBlockIndex* pcopy = block;
+				while (true)
+				{
+					if (!pcopy->pprev || pcopy->pprev == pindexFork)
+						break;
+					mapBlockIndex.erase(pcopy->GetBlockHash());
+				
+					pcopy = pcopy->pprev;
+					results.push_back(Pair("erasing", pcopy->nHeight));
+				}
+			}
+		}
+    }
+	else if (sItem == "vectoroffiles")
+	{
+		std::string dirPath = "/testbed";	
+		std::vector<std::string> skipList;
+		std::vector<std::string> g = GetVectorOfFilesInDirectory(dirPath, skipList);
+		// Iterate over the vector and print all files
+		for (auto str : g)
+		{
+			results.push_back(Pair("File", str));
+		}
 	}
 	else if (sItem == "datalist")
 	{

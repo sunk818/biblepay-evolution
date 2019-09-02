@@ -321,8 +321,8 @@ void TransactionRecord::updateStatus(const CWalletTx &wtx, int numISLocks, int c
         }
     }
     // For generated transactions, determine maturity
-    else if(type == TransactionRecord::Generated)
-    {
+    else if (type == TransactionRecord::Generated || type == TransactionRecord::SuperBlockPayment || type == TransactionRecord::GSCPayment)
+	{
         if (wtx.GetBlocksToMaturity() > 0)
         {
             status.status = TransactionStatus::Immature;

@@ -16,10 +16,10 @@ class CWallet;
 
 UniValue GetCampaigns();
 bool CheckCampaign(std::string sName);
-bool CreateClientSideTransaction(bool fForce, bool fDiaryProjectsOnly, std::string sDiary, std::string& sError);
 bool Enrolled(std::string sCampaignName, std::string& sError);
 CPK GetCPKFromProject(std::string sProjName, std::string sCPKPtr);
 UniValue SentGSCCReport(int nHeight);
 CPK GetMyCPK(std::string sProjectName);
+bool CreateClientSideTransaction(bool fForce, bool fDiaryProjectsOnly, std::string sDiary, std::string& sError, CAmount nFoundationDonationOverride = 0, std::string sCampaignName = "");
 
 #endif

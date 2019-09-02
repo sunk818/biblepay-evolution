@@ -209,6 +209,11 @@ int ReassessAllChains();
 double GetFees(CTransactionRef tx);
 int64_t GetCacheEntryAge(std::string sSection, std::string sKey);
 void LogPrintWithTimeLimit(std::string sSection, std::string sValue, int64_t nMaxAgeInSeconds);
-
+std::vector<std::string> GetVectorOfFilesInDirectory(const std::string &dirPath, const std::vector<std::string> dirSkipList);
+std::string GetAttachmentData(std::string sPath);
+std::string BIPFS_UploadSingleFile(std::string sPath, std::string sWebPath);
+std::string Path_Combine(std::string sPath, std::string sFileName);
+std::string DSQL_Ansi92Query(std::string sSQL);
+double GetROI(double nTitheAmount);
 
 #endif

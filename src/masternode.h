@@ -280,16 +280,7 @@ public:
 			}
 		}
 
-		POSEScore p = GetPOSEScore(addr.ToString());
-		if (p.nTries > POSE_BAN_MIN_TRIES && p.nScore < POSE_BAN_THRESHHOLD && nActiveState != MASTERNODE_POSE_BAN)
-		{
-			// Watchman-on-the-wall Ping Status - Expired
-			LogPrintf("\nWatchman on the wall calling for %s at %f", "MASTERNODE_POSE_BAN", GetAdjustedTime());
-			nActiveState = MASTERNODE_POSE_BAN;
-			return false;
-		}
-
-        if(nActiveState == MASTERNODE_ENABLED) 
+	    if(nActiveState == MASTERNODE_ENABLED) 
 		{
             return true;
         }

@@ -595,13 +595,8 @@ UniValue masternodelist(const JSONRPCRequest& request)
             objMN.push_back(Pair("address", dmn->pdmnState->addr.ToString()));
             objMN.push_back(Pair("payee", payeeStr));
             objMN.push_back(Pair("status", dmnToStatus(dmn)));
-			POSEScore p = GetPOSEScore(dmn->pdmnState->addr.ToString());
-			LogPrintf("Node %s Pose %f ", payeeStr, p.nScore);
-			objMN.push_back(Pair("posescore", (double)p.nScore * 100));
-			objMN.push_back(Pair("posescoretries", p.nTries));
-			objMN.push_back(Pair("posescoresuccesscount", p.nSuccess));
-            objMN.push_back(Pair("lastpaidtime", dmnToLastPaidTime(dmn)));
-            objMN.push_back(Pair("lastpaidblock", dmn->pdmnState->nLastPaidHeight));
+	        objMN.push_back(Pair("lastpaidtime", dmnToLastPaidTime(dmn)));
+		    objMN.push_back(Pair("lastpaidblock", dmn->pdmnState->nLastPaidHeight));
             objMN.push_back(Pair("owneraddress", CBitcoinAddress(dmn->pdmnState->keyIDOwner).ToString()));
             objMN.push_back(Pair("votingaddress", CBitcoinAddress(dmn->pdmnState->keyIDVoting).ToString()));
             objMN.push_back(Pair("collateraladdress", collateralAddressStr));

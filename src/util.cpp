@@ -132,6 +132,7 @@ static std::unordered_map<std::string, std::vector<std::string> > _mapMultiArgs;
 const std::unordered_map<std::string, std::vector<std::string> >& mapMultiArgs = _mapMultiArgs;
 bool fDebug = false;
 bool fDebugSpam = false;
+bool fDebugBench = false;
 bool fPrintToConsole = false;
 bool fPrintToDebugLog = true;
 
