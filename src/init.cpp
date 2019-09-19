@@ -1757,9 +1757,10 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
     }
 
     // ********************************************************* Step 7: Load KJV Bible
-    uiInterface.InitMessage(_("Loading KJV Bible..."));
+    uiInterface.InitMessage(_("Loading English (KJV) Bible..."));
     initkjv();
-    
+    uiInterface.InitMessage(_("Loading Chinese (CNV) Bible..."));
+	initcnv();
     // ********************************************************* Step 7a: check lite mode and load sporks
 
     // lite mode disables all Biblepay-specific functionality
@@ -1989,10 +1990,20 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
     if(fLiteMode && fMasternodeMode) {
         return InitError(_("You can not start a masternode in lite mode."));
     }
+	
+	// R Andrews; Apollon Support
+	if (fMasternodeMode || true)
+	{
+		msMasterNodeLegacyPrivKey = GetArg("-masternodeprivkey", "");
+		if (!msMasterNodeLegacyPrivKey.empty())
+		{
+			LogPrintf("\nSetting masternodeprivkey. %f", 1);
+		}
+	}
 
     if(fMasternodeMode) {
         LogPrintf("MASTERNODE:\n");
-
+		
         std::string strMasterNodeBLSPrivKey = GetArg("-masternodeblsprivkey", "");
         if(!strMasterNodeBLSPrivKey.empty()) {
             auto binKey = ParseHex(strMasterNodeBLSPrivKey);
@@ -2005,8 +2016,11 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
             } else {
                 return InitError(_("Invalid masternodeblsprivkey. Please see documentation."));
             }
-        } else {
-            return InitError(_("You must specify a masternodeblsprivkey in the configuration. Please see documentation for help."));
+        } 
+		else 
+		{
+			LogPrintf("\n*** SANCTUARY WAS STARTED WITH NO MASTERNODEBLSPRIVKEY!  This sanctuary will fail.  *** This node may be waiting for the masternodeblsprivkey to be sent via the blscommand. \n");
+			// Reserved: return InitError(_("You must specify a masternodeblsprivkey in the configuration. Please see documentation for help."));
         }
 
         // Create and register activeMasternodeManager, will init later in ThreadImport
@@ -2069,6 +2083,20 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
 
         strDBName = "governance.dat";
         uiInterface.InitMessage(_("Loading governance cache..."));
+
+		// Bloat Prevention of governance.dat:
+		// During forensic analysis the BiblePay Team has discovered that this file will grow bigger each time we deserialize governance objects, therefore we need to clear it if its bigger than 25 megs, and let it get reindexed.
+		boost::filesystem::path pathGov = GetDataDir() / "governance.dat";
+		int64_t nGovSz = GetFileSize(pathGov.string());
+		LogPrintf("Governance file size %f", nGovSz);
+		if (nGovSz > 25000000)
+		{
+			LogPrintf("Removing bloated governance file %f", nGovSz);
+			if(boost::filesystem::exists(pathGov))
+				boost::filesystem::remove(pathGov); 
+		}
+		// End of Bloat Prevention
+
         CFlatDB<CGovernanceManager> flatdb3(strDBName, "magicGovernanceCache");
         if(!flatdb3.Load(governance)) {
             return InitError(_("Failed to load governance cache from") + "\n" + (pathDB / strDBName).string());

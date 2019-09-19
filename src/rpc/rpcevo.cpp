@@ -12,6 +12,7 @@
 #include "utilmoneystr.h"
 #include "validation.h"
 #include "smartcontract-server.h"
+#include "kjv.h"
 
 #ifdef ENABLE_WALLET
 #include "wallet/coincontrol.h"
@@ -680,6 +681,69 @@ UniValue protx_update_service(const JSONRPCRequest& request)
     return SignAndSendSpecialTx(tx);
 }
 
+static std::map<std::string, double> mvBlockVersion;
+void ScanBlockChainVersion(int nLookback)
+{
+    mvBlockVersion.clear();
+    int nMaxDepth = chainActive.Tip()->nHeight;
+    int nMinDepth = (nMaxDepth - nLookback);
+    if (nMinDepth < 1) nMinDepth = 1;
+    CBlock block;
+    CBlockIndex* pblockindex = chainActive.Tip();
+ 	const Consensus::Params& consensusParams = Params().GetConsensus();
+    while (pblockindex->nHeight > nMinDepth)
+    {
+         if (!pblockindex || !pblockindex->pprev) return;
+         pblockindex = pblockindex->pprev;
+         if (ReadBlockFromDisk(block, pblockindex, consensusParams)) 
+		 {
+			std::string sVersion = RoundToString(GetBlockVersion(block.vtx[0]->vout[0].sTxOutMessage), 0);
+			mvBlockVersion[sVersion]++;
+		 }
+    }
+}
+
+ UniValue GetVersionReport()
+{
+	UniValue ret(UniValue::VOBJ);
+    //Returns a report of the BiblePay version that has been solving blocks over the last N blocks
+	ScanBlockChainVersion(BLOCKS_PER_DAY);
+    std::string sBlockVersion;
+    std::string sReport = "Version, Popularity\r\n";
+    std::string sRow;
+    double dPct = 0;
+    ret.push_back(Pair("Version","Popularity,Percent %"));
+    double Votes = 0;
+	for (auto ii : mvBlockVersion) 
+    {
+		double Popularity = mvBlockVersion[ii.first];
+		Votes += Popularity;
+    }
+    for (auto ii : mvBlockVersion)
+	{
+		double Popularity = mvBlockVersion[ii.first];
+		sBlockVersion = ii.first;
+        if (Popularity > 0)
+        {
+			sRow = sBlockVersion + "," + RoundToString(Popularity, 0);
+            sReport += sRow + "\r\n";
+            dPct = Popularity / (Votes+.01) * 100;
+            ret.push_back(Pair(sBlockVersion,RoundToString(Popularity, 0) + "; " + RoundToString(dPct, 2) + "%"));
+        }
+    }
+	return ret;
+}
+
+UniValue versionreport(const JSONRPCRequest& request)
+{
+	if (request.fHelp)
+	{
+		throw std::runtime_error("versionreport:  Shows a list of the versions of software running on BiblePay users machines ranked by percent.  This information is gleaned from the last 205 mined blocks.");
+	}
+	UniValue uVersionReport = GetVersionReport();
+	return uVersionReport;
+}
+
 void protx_update_registrar_help(CWallet* const pwallet)
 {
     throw std::runtime_error(
@@ -1249,12 +1313,45 @@ UniValue sponsorchild(const JSONRPCRequest& request)
 			"\nNOTE: Please paste the BiblePay hex child ID #" + sChildId + " in the Paypal NOTES textbox before submitting the payment."
 			"\nOption 3:  GlobalGiving Match:"
 			"\nTo use Global Giving, see this page https://www.globalgiving.org/recurring-donations-matched/ and set up a recurring donation, then notify Anna with CameroonONE <Anna.Cavolowsky@cameroonone.org> with your ChildID and verify the recurring donation is set up."
+			"\nOption 4:  Pay in BBP:"
+			"\nTo pay with BiblePay, send the converted amount (based on the midpoint of our coinmarketcap value) to Cameroon-One's wallet:  BHRiFZYUpHj2r3gxw7pHyvByTUk1dGb8vz"
+			"\nThen send an e-mail to 'Todd Finklestone <todd.justin@cameroonone.org>' with the BBP Amount sent, the TXID, and the Child ID you are paying for."
 			"\n";
+
 		std::vector<std::string> vNarr = Split(sNarr.c_str(), "\n");
 		for (int i = 0; i < vNarr.size(); i++)
 		{
 			results.push_back(Pair("Notes " + RoundToString(i,0), vNarr[i]));
 		}
+	}
+	return results;
+}
+
+UniValue bookname(const JSONRPCRequest& request)
+{
+	if (request.fHelp || request.params.size() != 1)	
+	{
+		throw std::runtime_error("bookname short_book_name:  Shows the long Bible Book Name corresponding to the short name.  IE: bookname JDE.");
+	}
+    UniValue results(UniValue::VOBJ);
+	std::string sBookName = request.params[0].get_str();
+	std::string sReversed = GetBookByName(sBookName);
+	results.push_back(Pair(sBookName, sReversed));
+	return results;
+}
+
+ UniValue books(const JSONRPCRequest& request)
+{
+	if (request.fHelp)	
+	{
+		throw std::runtime_error("books:  Shows the book names of the Bible.");
+	}
+    UniValue results(UniValue::VOBJ);
+	for (int i = 0; i <= BIBLE_BOOKS_COUNT; i++)
+	{
+		std::string sBookName = GetBook(i);
+		std::string sReversed = GetBookByName(sBookName);
+		results.push_back(Pair(sBookName, sReversed));
 	}
 	return results;
 }
@@ -1300,6 +1397,33 @@ UniValue sendgscc(const JSONRPCRequest& request)
  	return results;
 }
 
+UniValue getchildbalance(const JSONRPCRequest& request)
+{
+	if (request.fHelp || request.params.size() != 1)	
+	{
+		throw std::runtime_error("getchildbalance:  Shows the balance in USD for a given child.  IE: getchildbalance childid.");
+	}
+    UniValue results(UniValue::VOBJ);
+	std::string sChildID = request.params[0].get_str();
+	double dBal = GetCameroonChildBalance(sChildID);	
+	results.push_back(Pair("Balance", dBal));
+	return results;
+}
+
+UniValue datalist(const JSONRPCRequest& request)
+{
+	if (request.fHelp || (request.params.size() != 1 && request.params.size() != 2))
+			throw std::runtime_error("You must specify type: IE 'datalist PRAYER'.  Optionally you may enter a lookback period in days: IE 'exec datalist PRAYER 30'.");
+	std::string sType = request.params[0].get_str();
+	double dDays = 30;
+	if (request.params.size() > 1)
+		dDays = cdbl(request.params[1].get_str(),0);
+	int iSpecificEntry = 0;
+	std::string sEntry;
+	UniValue aDataList = GetDataList(sType, (int)dDays, iSpecificEntry, "", sEntry);
+	return aDataList;
+}
+
 UniValue listchildren(const JSONRPCRequest& request)
 {
 	// List sponsored children by the User's CPK
@@ -1323,7 +1447,7 @@ UniValue listchildren(const JSONRPCRequest& request)
 	{
 		std::string sCPK = a.second.sAddress;
 		std::string sChildID = a.second.sOptData;
-		std::string sBIOUrl = "https://biblepay.cameroonone.org/" + sChildID + ".htm";
+		std::string sBIOUrl = "https://biblepay.cameroonone.org/bios/" + sChildID + ".htm";
 		std::string sChildName; // We may or may not be able to retrieve this from the API (pending).
 		CPK userCPK = GetCPKFromProject("cpk", sCPK);
 		if (!sChildID.empty())
@@ -1337,7 +1461,7 @@ UniValue listchildren(const JSONRPCRequest& request)
 				results.push_back(Pair("Balance", nBalance));
 				if (nBalance == -999)
 					results.push_back(Pair("Notes", "This child is not provisioned yet."));
-				results.push_back(Pair("Nickname", userCPK.sNickName));
+				results.push_back(Pair("Nickname", Caption(userCPK.sNickName, 10)));
 				if (!sChildName.empty())
 					results.push_back(Pair("Child Name", sChildName));
 			}
@@ -1482,6 +1606,10 @@ UniValue _bls(const JSONRPCRequest& request)
 static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         okSafeMode
   //  --------------------- ------------------------  -----------------------  ----------
+	{ "evo",                "bookname",                     &bookname,                      false, {}  },
+	{ "evo",                "books",                        &books,                         false, {}  },
+	{ "evo",                "datalist",                     &datalist,                      false, {}  },
+	{ "evo",                "getchildbalance",              &getchildbalance,               false, {}  },
     { "evo",                "bls",                          &_bls,                          false, {}  },
     { "evo",                "protx",                        &protx,                         false, {}  },
 	{ "evo",                "createnonfinancialtransaction",&createnonfinancialtransaction, false, {}  },
@@ -1489,6 +1617,7 @@ static const CRPCCommand commands[] =
 	{ "evo",                "sponsorchild",                 &sponsorchild,                  false, {}  },
 	{ "evo",                "listchildren",                 &listchildren,                  false, {}  },
 	{ "evo",                "sendgscc",                     &sendgscc,                      false, {}  },
+	{ "evo",                "versionreport",                &versionreport,                 false, {}  },
 };
 
 void RegisterEvoRPCCommands(CRPCTable &tableRPC)

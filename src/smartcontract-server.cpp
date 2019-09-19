@@ -402,9 +402,16 @@ double CalculatePoints(std::string sCampaign, std::string sDiary, double nCoinAg
 	return 0;
 }
 
-bool VoteForGobject(uint256 govobj, std::string sVoteOutcome, std::string& sError)
+bool VoteForGobject(uint256 govobj, std::string sVoteSignal, std::string sVoteOutcome, std::string& sError)
 {
-	vote_signal_enum_t eVoteSignal = CGovernanceVoting::ConvertVoteSignal("funding");
+
+	if (sVoteSignal != "funding" && sVoteSignal != "delete")
+	{
+		LogPrintf("Sanctuary tried to vote in a way that is prohibited.  Vote failed. %s", sVoteSignal);
+		return false;
+	}
+
+	vote_signal_enum_t eVoteSignal = CGovernanceVoting::ConvertVoteSignal(sVoteSignal);
 	vote_outcome_enum_t eVoteOutcome = CGovernanceVoting::ConvertVoteOutcome(sVoteOutcome);
 	int nSuccessful = 0;
 	int nFailed = 0;
@@ -827,7 +834,9 @@ bool VoteForGSCContract(int nHeight, std::string sMyContract, std::string& sErro
 		iVotes = myGov->GetAbsoluteYesCount(VOTE_SIGNAL_FUNDING);
 		LogPrintf("\nSmartContract-Server::VoteForGSCContractOrderedByHash::Voting %s for govHash %s, with pre-existing-votes %f (created %f) Overbudget %f ",
 			sAction, myGov->GetHash().GetHex(), iVotes, myGov->GetCreationTime(), (double)fOverBudget);
-		VoteForGobject(myGov->GetHash(), sAction, sError);
+		VoteForGobject(myGov->GetHash(), "funding", sAction, sError);
+		// Additionally, clear the delete flag, just in case another node saw this contract as a negative earlier in the cycle
+		VoteForGobject(myGov->GetHash(), "delete", "no", sError);
 		break;
 	}
 	// Phase 2: Vote against contracts at this height that do not match our hash
@@ -842,8 +851,25 @@ bool VoteForGSCContract(int nHeight, std::string sMyContract, std::string& sErro
 			int iVotes = myGovForRemoval->GetAbsoluteYesCount(VOTE_SIGNAL_FUNDING);
 			LogPrintf("\nSmartContract-Server::VoteDownBadGCCContracts::Voting %s for govHash %s, with pre-existing-votes %f (created %f)",
 				sAction, myGovForRemoval->GetHash().GetHex(), iVotes, myGovForRemoval->GetCreationTime());
-			VoteForGobject(myGovForRemoval->GetHash(), sAction, sError);
+			VoteForGobject(myGovForRemoval->GetHash(), "funding", sAction, sError);
 			break;
+		}
+	}
+
+	//Phase 3:  Vote to delete very old contracts
+	int iNextSuperblock = 0;
+	int iLastSuperblock = GetLastGSCSuperblockHeight(chainActive.Tip()->nHeight, iNextSuperblock);
+	vPropByGov = GetGSCSortedByGov(iLastSuperblock, uPamHash, true);
+	for (int i = 0; i < vPropByGov.size(); i++)
+	{
+		CGovernanceObject* myGovYesterday = governance.FindGovernanceObject(vPropByGov[i].second);
+		int iVotes = myGovYesterday->GetAbsoluteYesCount(VOTE_SIGNAL_FUNDING);
+		LogPrintf("\nSmartContract-Server::DeleteYesterdaysEmptyGSCContracts::Voting %s for govHash %s, with pre-existing-votes %f (created %f)",
+				sAction, myGovYesterday->GetHash().GetHex(), iVotes, myGovYesterday->GetCreationTime());
+		int64_t nAge = GetAdjustedTime() - myGovYesterday->GetCreationTime();
+		if (iVotes == 0 && nAge > (60 * 60 * 24))
+		{
+			VoteForGobject(myGovYesterday->GetHash(), "delete", "yes", sError);
 		}
 	}
 
@@ -1110,7 +1136,17 @@ bool ChainSynced(CBlockIndex* pindex)
 	return (nAge > (60 * 60)) ? false : true;
 }
 
-UniValue GetProminenceLevels(int nHeight, bool fMeOnly)
+bool Included(std::string sFilterNickName, std::string sCPK)
+{
+	CPK oPrimary = GetCPKFromProject("cpk", sCPK);
+	std::string sNickName = Caption(oPrimary.sNickName, 10);
+	bool fIncluded = false;
+	if (((sNickName == sFilterNickName || oPrimary.sNickName == sFilterNickName) && !sFilterNickName.empty()) || (sFilterNickName.empty()))
+		fIncluded = true;
+	return fIncluded;
+}
+
+UniValue GetProminenceLevels(int nHeight, std::string sFilterNickName)
 {
 	UniValue results(UniValue::VOBJ);
 	if (nHeight == 0) 
@@ -1126,7 +1162,7 @@ UniValue GetProminenceLevels(int nHeight, bool fMeOnly)
 	std::vector<std::string> vData = Split(sData.c_str(), "\n");
 	std::vector<std::string> vDetails = Split(sDetails.c_str(), "\n");
 	std::vector<std::string> vDiaries = Split(sDiaries.c_str(), "\n");
-	results.push_back(Pair("Prominence", "Details"));
+	results.push_back(Pair("Prominence v1.1", "Details"));
 	// DETAIL ROW FORMAT: sCampaignName + "|" + Members.Address + "|" + nPoints + "|" + nProminence + "|" + NickName + "|\n";
 	std::string sMyCPK = DefaultRecAddress("Christian-Public-Key");
 
@@ -1144,8 +1180,7 @@ UniValue GetProminenceLevels(int nHeight, bool fMeOnly)
 			if (sNickName.empty())
 				sNickName = "N/A";
 			std::string sNarr = sCampaignName + ": " + sCPK + " [" + sNickName + "], Pts: " + RoundToString(nPoints, 2);
-
-			if ((fMeOnly && sCPK == sMyCPK) || (!fMeOnly))
+			if (Included(sFilterNickName, sCPK))
 				results.push_back(Pair(sNarr, RoundToString(nProminence, 2) + "%"));
 		}
 	}
@@ -1157,8 +1192,8 @@ UniValue GetProminenceLevels(int nHeight, bool fMeOnly)
 		if (vRow.size() >= 2)
 		{
 			std::string sCPK = vRow[0];
-			if ((fMeOnly && sCPK == sMyCPK) || (!fMeOnly))
-				results.push_back(Pair(vRow[1], vRow[2]));
+			if (Included(sFilterNickName, sCPK))
+				results.push_back(Pair(Caption(vRow[1], 10), vRow[2]));
 		}
 	}
 
@@ -1180,9 +1215,9 @@ UniValue GetProminenceLevels(int nHeight, bool fMeOnly)
 			if (sNickName.empty())
 				sNickName = "N/A";
 			CAmount nOwed = nPaymentsLimit * (nProminence / 100) * nMaxContractPercentage;
-			std::string sNarr = sCampaign + ": " + sCPK + " [" + sNickName + "]" + ", Pts: " + RoundToString(nPoints, 2) 
+			std::string sNarr = sCampaign + ": " + sCPK + " [" + Caption(sNickName, 10) + "]" + ", Pts: " + RoundToString(nPoints, 2) 
 				+ ", Reward: " + RoundToString(nPayment, 3);
-			if ((fMeOnly && sCPK == sMyCPK) || (!fMeOnly))
+			if (Included(sFilterNickName, sCPK))
 				results.push_back(Pair(sNarr, RoundToString(nProminence, 3) + "%"));
 		}
 	}
@@ -1251,6 +1286,7 @@ std::string ExecuteGenericSmartContractQuorumProcess()
 		std::string sWatchman = WatchmanOnTheWall(false, sContr);
 		if (fDebugSpam)
 			LogPrintf("WatchmanOnTheWall::Status %s Contract %s", sWatchman, sContr);
+		UpdateHealthInformation();
 	}
 	bool fStratisExport = (chainActive.Tip()->nHeight % BLOCKS_PER_DAY == 0) && fMasternodeMode;
 	if (fStratisExport)
@@ -1265,6 +1301,13 @@ std::string ExecuteGenericSmartContractQuorumProcess()
 	int nCascadeHeight = GetRandInt(chainActive.Tip()->nHeight);
 	bool fWarmingPeriod = nBlocksSinceLastEpoch < WARMING_DURATION;
 	int nQuorumAssessmentHeight = fWarmingPeriod ? nCascadeHeight : chainActive.Tip()->nHeight;
+
+	int nCreateWindow = chainActive.Tip()->nHeight * .25;
+	bool fPrivilegeToCreate = nCascadeHeight < nCreateWindow;
+
+ 	if (!fProd)
+		fPrivilegeToCreate = true;
+
 	bool fQuorum = (nQuorumAssessmentHeight % 5 == 0);
 	if (!fQuorum)
 		return "NTFQ_";
@@ -1317,7 +1360,7 @@ std::string ExecuteGenericSmartContractQuorumProcess()
 		}
 	}
 
-	if (uGovObjHash == uint256S("0x0"))
+	if (uGovObjHash == uint256S("0x0") && fPrivilegeToCreate)
 	{
 		std::string sQuorumTrigger = SerializeSanctuaryQuorumTrigger(iLastSuperblock, iNextSuperblock, sContract);
 		std::string sGobjectHash;

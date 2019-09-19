@@ -241,7 +241,7 @@ public:
 		consensus.DIP0003Height = 133891;
 		consensus.DIP0003EnforcementHeight = 133891;
 		consensus.DIP0003HeightPhase2 = 133891;
-		consensus.LLMQHeight = 140000;
+		consensus.LLMQHeight = 200000; // CRITICAL TODO:  Lets set this height at the go-live height for .14; as our current .13 branch is not producing fully acceptable LLMQ quorums yet.
 
 		consensus.QTHeight = 124000;  // Note to future forkers of BiblePay!  This height must be > (BLOCKS_PER_DAY * 32)!  Thank you for forking biblepay and thank you for your support!
 		consensus.powLimit = uint256S("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); 
@@ -394,7 +394,7 @@ public:
 		consensus.F7000_CUTOVER_HEIGHT = 100;
 		consensus.F12000_CUTOVER_HEIGHT = 100;
 		consensus.F13000_CUTOVER_HEIGHT = 100; 
-		consensus.ABNHeight = 54000;
+		consensus.ABNHeight = 5000;
 		int BLOCKS_PER_DAY = 205;
 		consensus.F9000_CUTOVER_HEIGHT= 100;
 		consensus.F11000_CUTOVER_HEIGHT= 1;
@@ -412,7 +412,7 @@ public:
 		consensus.nInstantSendConfirmationsRequired = 6;
 		consensus.nInstantSendKeepLock = 6;
 		consensus.nBudgetPaymentsStartBlock = 2002;
-		consensus.QTHeight = 31000;
+		consensus.QTHeight = 5000;
 		consensus.nBudgetPaymentsCycleBlocks = 50;
 		consensus.nBudgetPaymentsWindowBlocks = 10;
 		consensus.nSuperblockStartBlock = 4007; // NOTE: Should satisfy nSuperblockStartBlock > nBudgetPaymentsStartBlock
@@ -426,15 +426,16 @@ public:
 		consensus.FoundationQTAddress = "ygGKQR4bYwjGaEnX8KCyzEJhht4paYCiuo";
 		consensus.nDCCSuperblockStartBlock = 4504; 
         consensus.nDCCSuperblockCycle = BLOCKS_PER_DAY; // Daily
-        consensus.BIP34Height = 64960;
+        consensus.BIP34Height = 5001;
         consensus.BIP34Hash = uint256S("0x0");
         consensus.BIP65Height = 2431; 
         consensus.BIP66Height = 2075; 
-        consensus.DIP0001Height = 205000;
-		consensus.DIP0003Height = 64960; 
-		consensus.DIP0003EnforcementHeight = 120000;
-		consensus.DIP0003HeightPhase2 = 120000;
-		consensus.LLMQHeight = 175000;
+
+        consensus.DIP0001Height = 7000;
+		consensus.DIP0003Height = 5001; 
+		consensus.DIP0003EnforcementHeight = 8400;
+		consensus.DIP0003HeightPhase2 = 7000;
+		consensus.LLMQHeight = 7000;
 
         consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); 
         consensus.nPowTargetTimespan = 24 * 60 * 60; // Biblepay: 1 day
@@ -551,7 +552,6 @@ public:
 		{
 			boost::assign::map_list_of
 				(1,     uint256S("0xde31388eddd9e0ea515353628a0ca1f167466f09c45b10354de10459c7c018f2"))
-				(60000, uint256S("0x210d88152e3cd89a400034adf1d9ffebd3a6a0e96ced8eeec7c9ab18effa25f3"))
 		};
 
         chainTxData = ChainTxData{

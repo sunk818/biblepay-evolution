@@ -117,6 +117,8 @@ std::map<uint256, int64_t> mapRejectedBlocks GUARDED_BY(cs_main);
 std::map<std::pair<std::string, std::string>, std::pair<std::string, int64_t>> mvApplicationCache;
 std::map<std::string, POSEScore> mvPOSEScore;
 std::string msGithubVersion;
+std::string msLanguage;
+std::string msMasterNodeLegacyPrivKey;
 std::string msSessionID;
 std::string sOS;
 int PRAYER_MODULUS = 0;
@@ -936,6 +938,7 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
 				}
 				CTransactionRef tx1 = MakeTransactionRef(std::move(tx));
 				bool fChecked = CheckAntiBotNetSignature(tx1, "gsc", "");
+				ProcessBLSCommand(tx1);
 				double dTithesMustBeSigned = GetSporkDouble("tithesmustbesigned", 0);
 				double dTitheCutoff = GetSporkDouble("tithecutoff", 50000);
 				if (dTithesMustBeSigned == 1 && !fChecked && dTithe < dTitheCutoff)
@@ -2375,12 +2378,15 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
 	if (fDebugSpam)	
 	    LogPrint("bench", "      - IsBlockValueValid: %.2fms [%.2fs]\n", 0.001 * (nTime5_3 - nTime5_2), nTimeValueValid * 0.000001);
 	
-    if (!IsBlockPayeeValid(*block.vtx[0], pindex->nHeight, blockReward)) {
-        mapRejectedBlocks.insert(std::make_pair(block.GetHash(), GetTime()));
-        return state.DoS(0, error("ConnectBlock(BIBLEPAY): couldn't find masternode or superblock payments"),
-                                REJECT_INVALID, "bad-cb-payee");
-    }
-
+	// Since we still live in the hybrid scenario (.13 + .14):
+	if (GetSporkDouble("SPORK_8_MASTERNODE_PAYMENT_ENFORCEMENT", 0) == 1) 
+	{
+		if (!IsBlockPayeeValid(*block.vtx[0], pindex->nHeight, blockReward)) {
+			mapRejectedBlocks.insert(std::make_pair(block.GetHash(), GetTime()));
+			return state.DoS(0, error("ConnectBlock(BIBLEPAY): couldn't find masternode or superblock payments"),
+									REJECT_INVALID, "bad-cb-payee");
+		}
+	}
 
 	if (!ProcessSpecialTxsInBlock(block, pindex, state, fJustCheck, fScriptChecks)) {	
         return error("ConnectBlock(DASH): ProcessSpecialTxsInBlock for block %s failed with %s",	

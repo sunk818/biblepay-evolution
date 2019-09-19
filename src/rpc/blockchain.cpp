@@ -210,8 +210,8 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool tx
 		int iStart=0;
 		int iEnd=0;
 		// Display a verse from Genesis 1:1 for The Genesis Block:
-		GetBookStartEnd("gen",iStart,iEnd);
-		std::string sVerse = GetVerse("gen",1,1,iStart-1,iEnd);
+		GetBookStartEnd("gen", iStart, iEnd);
+		std::string sVerse = GetVerse("gen", 1, 1, iStart - 1, iEnd);
 		boost::trim(sVerse);
 		result.push_back(Pair("verses", sVerse));
 	}
@@ -1739,61 +1739,6 @@ void AppendSanctuaryFile(std::string sFile, std::string sData)
     fclose(configFile);
 }
 
-
-
-static std::map<std::string, double> mvBlockVersion;
-void ScanBlockChainVersion(int nLookback)
-{
-    mvBlockVersion.clear();
-    int nMaxDepth = chainActive.Tip()->nHeight;
-    int nMinDepth = (nMaxDepth - nLookback);
-    if (nMinDepth < 1) nMinDepth = 1;
-    CBlock block;
-    CBlockIndex* pblockindex = chainActive.Tip();
- 	const Consensus::Params& consensusParams = Params().GetConsensus();
-    while (pblockindex->nHeight > nMinDepth)
-    {
-         if (!pblockindex || !pblockindex->pprev) return;
-         pblockindex = pblockindex->pprev;
-         if (ReadBlockFromDisk(block, pblockindex, consensusParams)) 
-		 {
-			std::string sVersion = RoundToString(GetBlockVersion(block.vtx[0]->vout[0].sTxOutMessage), 0);
-			mvBlockVersion[sVersion]++;
-		 }
-    }
-}
-
-UniValue GetVersionReport()
-{
-	UniValue ret(UniValue::VOBJ);
-    //Returns a report of the BiblePay version that has been solving blocks over the last N blocks
-	ScanBlockChainVersion(BLOCKS_PER_DAY);
-    std::string sBlockVersion;
-    std::string sReport = "Version, Popularity\r\n";
-    std::string sRow;
-    double dPct = 0;
-    ret.push_back(Pair("Version","Popularity,Percent %"));
-    double Votes = 0;
-	for (auto ii : mvBlockVersion) 
-    {
-		double Popularity = mvBlockVersion[ii.first];
-		Votes += Popularity;
-    }
-    for (auto ii : mvBlockVersion)
-	{
-		double Popularity = mvBlockVersion[ii.first];
-		sBlockVersion = ii.first;
-        if (Popularity > 0)
-        {
-			sRow = sBlockVersion + "," + RoundToString(Popularity, 0);
-            sReport += sRow + "\r\n";
-            dPct = Popularity / (Votes+.01) * 100;
-            ret.push_back(Pair(sBlockVersion,RoundToString(Popularity, 0) + "; " + RoundToString(dPct, 2) + "%"));
-        }
-    }
-	return ret;
-}
-
 UniValue exec(const JSONRPCRequest& request)
 {
     if (request.fHelp || (request.params.size() != 1 && request.params.size() != 2  && request.params.size() != 3 && request.params.size() != 4 
@@ -1906,42 +1851,36 @@ UniValue exec(const JSONRPCRequest& request)
 	}
 	else if (sItem == "readverse")
 	{
-		if (request.params.size() != 3 && request.params.size() != 4)
-			throw std::runtime_error("You must specify Book and Chapter: IE 'readverse CO2 10'.  Optionally you may enter the VERSE #, IE: 'readverse CO2 10 2'.  To see a list of books: run getbooks.");
+		if (request.params.size() != 3 && request.params.size() != 4 && request.params.size() != 5)
+			throw std::runtime_error("You must specify Book and Chapter: IE 'readverse CO2 10'.  \nOptionally you may enter the Language (EN/CN) IE 'readverse CO2 10 CN'. \nOptionally you may enter the VERSE #, IE: 'readverse CO2 10 EN 2'.  To see a list of books: run getbooks.");
 		std::string sBook = request.params[1].get_str();
 		int iChapter = cdbl(request.params[2].get_str(),0);
 		int iVerse = 0;
+
+		if (request.params.size() > 3)
+		{
+			msLanguage = request.params[3].get_str();
+		}
+		if (request.params.size() > 4)
+			iVerse = cdbl(request.params[4].get_str(), 0);
+
 		if (request.params.size() == 4) iVerse = cdbl(request.params[3].get_str(), 0);
 		results.push_back(Pair("Book", sBook));
 		results.push_back(Pair("Chapter", iChapter));
+		results.push_back(Pair("Language", msLanguage));
 		if (iVerse > 0) results.push_back(Pair("Verse", iVerse));
-		int iStart=0;
-		int iEnd=0;
+		int iStart = 0;
+		int iEnd = 0;
 		GetBookStartEnd(sBook, iStart, iEnd);
 		for (int i = iVerse; i < BIBLE_VERSE_COUNT; i++)
 		{
-			std::string sVerse = GetVerse(sBook, iChapter, i, iStart - 1, iEnd);
+			std::string sVerse = GetVerseML(msLanguage, sBook, iChapter, i, iStart - 1, iEnd);
 			if (iVerse > 0 && i > iVerse) break;
 			if (!sVerse.empty())
 			{
 				std::string sKey = sBook + " " + RoundToString(iChapter, 0) + ":" + RoundToString(i, 0);
 			    results.push_back(Pair(sKey, sVerse));
 			}
-		}
-	}
-	else if (sItem == "bookname")
-	{
-		std::string sBookName = request.params[1].get_str();
-		std::string sReversed = GetBookByName(sBookName);
-		results.push_back(Pair(sBookName, sReversed));
-	}
-	else if (sItem == "books")
-	{
-		for (int i = 0; i <= BIBLE_BOOKS_COUNT; i++)
-		{
-			std::string sBookName = GetBook(i);
-			std::string sReversed = GetBookByName(sBookName);
-			results.push_back(Pair(sBookName, sReversed));
 		}
 	}
 	else if (sItem == "dsql_select")
@@ -1997,8 +1936,11 @@ UniValue exec(const JSONRPCRequest& request)
 			std::string sFee = ExtractXML(sResponse, "<FEE>", "</FEE>");
 			std::string sErrors = ExtractXML(sResponse, "<ERRORS>", "</ERRORS>");
 			std::string sSize = ExtractXML(sResponse, "<SIZE>", "</SIZE>");
+			std::string sHash = ExtractXML(sResponse, "<hash>", "</hash>");
+
 			results.push_back(Pair("Fee", sFee));
 			results.push_back(Pair("Size", sSize));
+			results.push_back(Pair("Hash", sHash));
 			results.push_back(Pair("Errors", sErrors));
 		}
 	}
@@ -2381,6 +2323,34 @@ UniValue exec(const JSONRPCRequest& request)
 		if (!fAdv)
 			results.push_back(Pair("Error", sError));
 	}
+	else if (sItem == "tuhi")
+	{
+		UpdateHealthInformation();
+	}
+	else if (sItem == "blscommand")
+	{
+		if (request.params.size() != 2)	
+			throw std::runtime_error("You must specify blscommand masternodeprivkey masternodeblsprivkey.");	
+
+ 		std::string sMNP = request.params[1].get_str();
+		std::string sMNBLSPrivKey = request.params[2].get_str();
+		std::string sCommand = "masternodeblsprivkey=" + sMNBLSPrivKey;
+		std::string sEnc = EncryptAES256(sCommand, sMNP);
+		std::string sCPK = DefaultRecAddress("Christian-Public-Key");
+		std::string sXML = "<blscommand>" + sEnc + "</blscommand>";
+		std::string sError;
+		std::string sResult = SendBlockchainMessage("bls", sCPK, sXML, 1, false, "", sError);
+		if (!sError.empty())
+			results.push_back(Pair("Errors", sError));
+		results.push_back(Pair("blsmessage", sXML));
+	}
+	else if (sItem == "testaes")
+	{
+		std::string sEnc = EncryptAES256("test", "abc");
+		std::string sDec = DecryptAES256(sEnc, "abc");
+		results.push_back(Pair("Enc", sEnc));
+		results.push_back(Pair("Dec", sDec));
+	}
 	else if (sItem == "join")
 	{
 		if (request.params.size() != 2 && request.params.size() != 3)
@@ -2497,6 +2467,41 @@ UniValue exec(const JSONRPCRequest& request)
 		std::string sData;
 		GetGovObjDataByPamHash(iNextSuperblock, hPAMHash, sData);
 		results.push_back(Pair("Data", sData));
+	}
+	else if (sItem == "masterclock")
+	{
+		const Consensus::Params& consensusParams = Params().GetConsensus();
+		CBlockIndex* pblockindexGenesis = FindBlockByHeight(0);
+		CBlock blockGenesis;
+		int64_t nBlockSpacing = 60 * 7;
+		if (ReadBlockFromDisk(blockGenesis, pblockindexGenesis, consensusParams))
+		{
+			    int64_t nEpoch = blockGenesis.GetBlockTime();
+				int64_t nNow = chainActive.Tip()->GetMedianTimePast();
+				int64_t nElapsed = nNow - nEpoch;
+				int64_t nTargetBlockCount = nElapsed / nBlockSpacing;
+				results.push_back(Pair("Elapsed Time (Seconds)", nElapsed));
+				results.push_back(Pair("Actual Blocks", chainActive.Tip()->nHeight));
+				results.push_back(Pair("Target Block Count", nTargetBlockCount));
+				double nClockAdjustment = 1.00 - ((double)chainActive.Tip()->nHeight / (double)nTargetBlockCount + .01);
+				std::string sLTNarr = nClockAdjustment > 0 ? "Slow" : "Fast";
+				results.push_back(Pair("Long Term Target DGW adjustment", nClockAdjustment));
+				results.push_back(Pair("Long Term Trend Narr", sLTNarr));
+				CBlockIndex* pblockindexRecent = FindBlockByHeight(chainActive.Tip()->nHeight * .90);
+				CBlock blockRecent;
+				if (ReadBlockFromDisk(blockRecent, pblockindexRecent, consensusParams))
+				{
+					int64_t nBlockSpan = chainActive.Tip()->nHeight - (chainActive.Tip()->nHeight * .90);
+					int64_t nTimeSpan = chainActive.Tip()->GetMedianTimePast() - blockRecent.GetBlockTime();
+					int64_t nProjectedBlockCount = nTimeSpan / nBlockSpacing;
+					double nRecentTrend = 1.00 - ((double)nBlockSpan / (double)nProjectedBlockCount + .01);
+					std::string sNarr = nRecentTrend > 0 ? "Slow" : "Fast";
+					results.push_back(Pair("Recent Trend", nRecentTrend));
+					results.push_back(Pair("Recent Trend Narr", sNarr));
+					double nGrandAdjustment = nClockAdjustment + nRecentTrend;
+					results.push_back(Pair("Recommended Next DGW adjustment", nGrandAdjustment));
+				}
+		}
 	}
 	else if (sItem == "antigpu")
 	{
@@ -2700,6 +2705,7 @@ UniValue exec(const JSONRPCRequest& request)
 		// Launch the browser 
 		results.push_back(Pair("data", sData));
 	}
+
 	else if (sItem == "analyze")
 	{
 		if (request.params.size() != 3)
@@ -2707,7 +2713,7 @@ UniValue exec(const JSONRPCRequest& request)
 		int nHeight = cdbl(request.params[1].get_str(), 0);
 		std::string sNickName = request.params[2].get_str();
 		WriteCache("analysis", "user", sNickName, GetAdjustedTime());
-		UniValue p = GetProminenceLevels(nHeight + BLOCKS_PER_DAY, false);
+		UniValue p = GetProminenceLevels(nHeight + BLOCKS_PER_DAY, "");
 		std::string sData1 = ReadCache("analysis", "data_1");
 		std::string sData2 = ReadCache("analysis", "data_2");
 		results.push_back(Pair("Campaign", "Totals"));
@@ -2818,14 +2824,6 @@ UniValue exec(const JSONRPCRequest& request)
 		double nCap = GetProminenceCap("CAMEROON-ONE", 1333, .50);
 		results.push_back(Pair("cap", nCap));
 	}
-	else if (sItem == "getchildbalance")
-	{	
-		if (request.params.size() != 2)	
-			throw std::runtime_error("You must specify the childID.");	
-		std::string sChildID = request.params[1].get_str();	
-		double dBal = GetCameroonChildBalance(sChildID);	
-		results.push_back(Pair("Balance", dBal));	
-	}
 	else if (sItem == "cleantips")
 	{
 		if (chainActive.Tip()->nHeight < 2000)
@@ -2879,19 +2877,6 @@ UniValue exec(const JSONRPCRequest& request)
 		{
 			results.push_back(Pair("File", str));
 		}
-	}
-	else if (sItem == "datalist")
-	{
-		if (request.params.size() != 2 && request.params.size() != 3)
-			throw std::runtime_error("You must specify type: IE 'exec datalist PRAYER'.  Optionally you may enter a lookback period in days: IE 'exec datalist PRAYER 30'.");
-		std::string sType = request.params[1].get_str();
-		double dDays = 30;
-		if (request.params.size() == 3)
-			dDays = cdbl(request.params[2].get_str(),0);
-		int iSpecificEntry = 0;
-		std::string sEntry = "";
-		UniValue aDataList = GetDataList(sType, (int)dDays, iSpecificEntry, "", sEntry);
-		return aDataList;
 	}
 	else if (sItem == "testhttps")
 	{
@@ -2949,11 +2934,6 @@ UniValue exec(const JSONRPCRequest& request)
         UniValue objTx(UniValue::VOBJ);
         TxToJSON(tx, uint256(), objTx);
         results.push_back(objTx);
-	}
-	else if (sItem == "versionreport")
-	{
-		UniValue uVersionReport = GetVersionReport();
-		return uVersionReport;
 	}
 	else if (sItem == "hextxtojson2")
 	{

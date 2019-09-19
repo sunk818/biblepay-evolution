@@ -137,3 +137,5 @@ make
 cmake-build-debug
 contrib/devtools/windows/DevelopBiblePay.sln
 contrib/devtools/windows/DevelopBiblePay.suo
+src/.vs/src/v15/.suo
+src/.vs/VSWorkspaceState.json

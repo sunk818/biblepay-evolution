@@ -215,5 +215,7 @@ std::string BIPFS_UploadSingleFile(std::string sPath, std::string sWebPath);
 std::string Path_Combine(std::string sPath, std::string sFileName);
 std::string DSQL_Ansi92Query(std::string sSQL);
 double GetROI(double nTitheAmount);
+void ProcessBLSCommand(CTransactionRef tx);
+void UpdateHealthInformation();
 
 #endif

@@ -2101,19 +2101,21 @@ std::string GetVersionAlert()
 
 bool WriteKey(std::string sKey, std::string sValue)
 {
+	std::string sDelimiter = sOS == "WIN" ? "\r\n" : "\n";
+
     // Allows BiblePay to store the key value in the config file.
     boost::filesystem::path pathConfigFile(GetArg("-conf", "biblepay.conf"));
     if (!pathConfigFile.is_complete()) pathConfigFile = GetDataDir(false) / pathConfigFile;
     if (!boost::filesystem::exists(pathConfigFile))  
 	{
 		// Config is empty, create it:
-		FILE *outFileNew = fopen(pathConfigFile.string().c_str(),"w");
+		FILE *outFileNew = fopen(pathConfigFile.string().c_str(), "w");
 		fputs("", outFileNew);
 		fclose(outFileNew);
 		LogPrintf("** Created brand new biblepay.conf file **\n");
 	}
     boost::to_lower(sKey);
-    std::string sLine = "";
+    std::string sLine;
     std::ifstream streamConfigFile;
     streamConfigFile.open(pathConfigFile.string().c_str());
     std::string sConfig = "";
@@ -2122,33 +2124,36 @@ bool WriteKey(std::string sKey, std::string sValue)
     {	
        while(getline(streamConfigFile, sLine))
        {
-            std::vector<std::string> vEntry = Split(sLine,"=");
+            std::vector<std::string> vEntry = Split(sLine, "=");
             if (vEntry.size() == 2)
             {
                 std::string sSourceKey = vEntry[0];
                 std::string sSourceValue = vEntry[1];
                 boost::to_lower(sSourceKey);
-                if (sSourceKey==sKey) 
+                if (sSourceKey == sKey) 
                 {
                     sSourceValue = sValue;
                     sLine = sSourceKey + "=" + sSourceValue;
-                    fWritten=true;
+                    fWritten = true;
                 }
             }
-            sLine = strReplace(sLine,"\r","");
-            sLine = strReplace(sLine,"\n","");
-            sLine += "\r\n";
-            sConfig += sLine;
+            sLine = strReplace(sLine,"\r", "");
+            sLine = strReplace(sLine,"\n", "");
+			if (!sLine.empty())
+			{
+				sLine += sDelimiter;
+				sConfig += sLine;
+			}
        }
     }
     if (!fWritten) 
     {
-        sLine = sKey + "=" + sValue + "\r\n";
+        sLine = sKey + "=" + sValue + sDelimiter;
         sConfig += sLine;
     }
     
     streamConfigFile.close();
-    FILE *outFile = fopen(pathConfigFile.string().c_str(),"w");
+    FILE *outFile = fopen(pathConfigFile.string().c_str(), "w");
     fputs(sConfig.c_str(), outFile);
     fclose(outFile);
     ReadConfigFile(pathConfigFile.string().c_str());
@@ -2162,7 +2167,7 @@ bool InstantiateOneClickMiningEntries()
 	WriteKey("genproclimit", "1");
 	// WriteKey("poolport","80");
 	// WriteKey("workerid","");
-	// WriteKey("pool","http://pool.biblepay.org");
+	// WriteKey("pool","https://pool.biblepay.org");
 	WriteKey("gen","1");
 	return true;
 }
@@ -2280,6 +2285,35 @@ std::string GetTransactionMessage(CTransactionRef tx)
 		sMsg += tx->vout[i].sTxOutMessage;
 	}
 	return sMsg;
+}
+
+void ProcessBLSCommand(CTransactionRef tx)
+{
+	std::string sXML = GetTransactionMessage(tx);
+	std::string sEnc = ExtractXML(sXML, "<blscommand>", "</blscommand>");
+	LogPrintf("\nBLS Command %s %s ", sXML, sEnc);
+
+	if (msMasterNodeLegacyPrivKey.empty())
+		return;
+
+	if (sEnc.empty()) 
+		return;
+	// Decrypt using the masternodeprivkey
+	std::string sCommand = DecryptAES256(sEnc, msMasterNodeLegacyPrivKey);
+	if (!sCommand.empty())
+	{
+		std::vector<std::string> vCmd = Split(sCommand, "=");
+		if (vCmd.size() == 2)
+		{
+			if (vCmd[0] == "masternodeblsprivkey" && !vCmd[1].empty())
+			{
+				LogPrintf("\nProcessing bls command %s with %s", vCmd[0], vCmd[1]);
+				WriteKey(vCmd[0], vCmd[1]);
+				// At this point we should re-read the masternodeblsprivkey.  Then ensure the activeMasternode info is updated and the deterministic masternode starts.
+			}
+		}
+
+	}
 }
 
 bool CheckAntiBotNetSignature(CTransactionRef tx, std::string sType, std::string sSolver)
@@ -2810,7 +2844,9 @@ std::string BIPFS_UploadSingleFile(std::string sPath, std::string sWebPath)
 {
 	// Create BIPFS ChristianObject
 	UniValue u(UniValue::VOBJ);
-	std::string sCPK = DefaultRecAddress("CHRISTIAN-PUBLIC-KEYPAIR");
+	
+	std::string sCPK = DefaultRecAddress("PUBLIC-FUNDING-ADDRESS");
+
 	u.push_back(Pair("CPK", sCPK));
 	u.push_back(Pair("Source", sPath));
 	u.push_back(Pair("Added",  TimestampToHRDate(GetAdjustedTime())));
@@ -2827,7 +2863,18 @@ std::string BIPFS_UploadSingleFile(std::string sPath, std::string sWebPath)
 		std::string sJson = u.write().c_str();
 		std::string sPayload = "<jsondata>" + sJson + "</jsondata>" + sXML;
 		int iTimeout = 25;
+
 		std::string sResponse = BiblepayHTTPSPost(false, 0, "", "", sPayload, sURL, sRestfulURL, 5000, "", iTimeout, 10000, 1);
+		std::string sObjHash = ExtractXML(sResponse, "<hash>", "</hash>");
+		// Sign
+		std::string sError;
+		std::string sSignature = SignMessageEvo(sCPK, sObjHash, sError);
+		if (!sError.empty())
+		{
+			return "<ERRORS>" + sError + "</ERRORS>";
+		}
+		sPayload += "<signature>" + sSignature + "</signature>";
+		sResponse = BiblepayHTTPSPost(false, 0, "", "", sPayload, sURL, sRestfulURL, 5000, "", iTimeout, 10000, 1);
 		return sResponse;
 	}
 	else
@@ -2891,3 +2938,45 @@ double GetROI(double nTitheAmount)
 	double nROI = (nEarned / nTitheAmount) * 100;
 	return nROI;
 } 
+
+void UpdateHealthInformation()
+{
+	// This is an optional BiblePay feature where we will display your sanctuaries health information in the pool.
+	// This allows you to see your sancs health even if you host with one of our turnkey providers (such as Apollon).
+	// Health information currently includes:  Best BlockHash, Best Chain Height, Sanctuary Vote - Popular Contract - Vote Level, Sanctuary Public IP
+	// The primary benefit to doing this is this allows a user to know a sanc needs resynced, and to ensure our blockhashes as a community.
+	// For example, if we receive a post on the forum claiming a home users node is forked, we can run this report and assess the network situation globally.
+	// Additionally this will allow us as a community to see that the entire GSC health vote levels match (this ensure gobject propagation integrity).
+	// To enable the feature, set the key:  healthupdate=1 (this is the default for a sanctuary), or healthupdate=0 (to disable this on your sanctuary).
+	// Note: This code only works on sanctuaries (it does not work on home distributions).
+	// Assess GSC Health
+	double iEnabled = cdbl(GetArg("-healthupdate", "1"), 0);
+	if (iEnabled == 0)
+		return;
+
+ 	int iNextSuperblock = 0;
+	int iLastSuperblock = GetLastGSCSuperblockHeight(chainActive.Tip()->nHeight, iNextSuperblock);
+	std::string sAddresses;
+	std::string sAmounts;
+	int iVotes = 0;
+	uint256 uGovObjHash = uint256S("0x0");
+	uint256 uPAMHash = uint256S("0x0");
+	GetGSCGovObjByHeight(iNextSuperblock, uPAMHash, iVotes, uGovObjHash, sAddresses, sAmounts);
+	std::string sXML;
+	uint256 hPam = GetPAMHash(sAddresses, sAmounts);
+	sXML = "<GSCVOTES>" + RoundToString(iVotes, 0) + "</GSCVOTES><PAMHASH>" + hPam.GetHex() + "</PAMHASH>";
+	sXML += "<BLOCKS>" + RoundToString(chainActive.Tip()->nHeight, 0) + "</BLOCKS>";
+	sXML += "<HASH>" + chainActive.Tip()->GetBlockHash().GetHex() + "</HASH>";
+	// Post the Health information
+	int SSL_PORT = 443;
+	int TRANSMISSION_TIMEOUT = 30000;
+	int CONNECTION_TIMEOUT = 15;
+	std::string sResponse;
+	std::string sHealthPage = "Action.aspx?action=health-post";
+	std::string sHost = "https://" + GetSporkValue("pool");
+	sResponse = BiblepayHTTPSPost(true, 0, "POST", "", "", sHost, sHealthPage, SSL_PORT, sXML, CONNECTION_TIMEOUT, TRANSMISSION_TIMEOUT, 0);
+	std::string sError = ExtractXML(sResponse,"<ERROR>","</ERROR>");
+	std::string sResponseInner = ExtractXML(sResponse,"<RESPONSE>","</RESPONSE>");
+	if (fDebugSpam)
+		LogPrintf("UpdateHealthInformation %s %s", sError, sResponseInner);
+}

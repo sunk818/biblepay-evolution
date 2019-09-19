@@ -123,6 +123,32 @@ UniValue getpoolinfo(const JSONRPCRequest& request)
     return obj;
 }
 
+void masternode_genkey_help()
+{
+    throw std::runtime_error(
+            "masternode genkey (compressed)\n"
+            "Generate new masternodeprivkey\n"
+            "\nArguments:\n"
+            "1. compressed        (boolean, optional, default=false) generate compressed privkey\n"
+        );
+}
+
+UniValue masternode_genkey(const JSONRPCRequest& request)
+{
+    if (request.fHelp)
+        masternode_genkey_help();
+
+    bool fCompressed = false;
+    if (request.params.size() > 1) {
+        fCompressed = ParseBoolV(request.params[1], "compressed");
+    }
+
+    CKey secret;
+    secret.MakeNewKey(fCompressed);
+
+    return CBitcoinSecret(secret).ToString();
+}
+
 void masternode_list_help()
 {
     throw std::runtime_error(
@@ -468,6 +494,8 @@ UniValue masternode(const JSONRPCRequest& request)
     } else if (strCommand == "outputs") {
         return masternode_outputs(request);
 #endif // ENABLE_WALLET
+    } else if (strCommand == "genkey") {
+       return masternode_genkey(request);
     } else if (strCommand == "status") {
         return masternode_status(request);
     } else if (strCommand == "winners") {

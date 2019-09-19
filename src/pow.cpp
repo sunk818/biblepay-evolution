@@ -161,7 +161,7 @@ unsigned int static DarkGravityWave(const CBlockIndex* pindexLast, const CBlockH
 		}
 		else if (pindexLast->nHeight >= 5000)
 		{
-			_nTargetTimespan = 120;  // 2 minute blocks in testnet
+			_nTargetTimespan = CountBlocks * 300;  // 7 minute blocks in testnet
 		}
 	}
 

@@ -72,6 +72,8 @@ HelpMessageDialog::HelpMessageDialog(QWidget *parent, HelpMode helpMode, int iPr
 		ui->comboChapter->setVisible(false);
 		ui->lblChapter->setVisible(false);
 		ui->lblBook->setVisible(false);
+		ui->lblLanguages->setVisible(false);
+		ui->comboLanguages->setVisible(false);
 	}
 	else if (helpMode == readbible)
 	{
@@ -82,6 +84,12 @@ HelpMessageDialog::HelpMessageDialog(QWidget *parent, HelpMode helpMode, int iPr
 		ui->comboChapter->setVisible(true);
 		ui->lblChapter->setVisible(true);
 		ui->lblBook->setVisible(true);
+		ui->lblLanguages->setVisible(true);
+		ui->comboLanguages->setVisible(true);
+
+ 		// Load the Languages
+		ui->comboLanguages->addItem("English");
+		ui->comboLanguages->addItem("Chinese");
 		// Load the books of the bible in
 		for (int i = 0; i <= BIBLE_BOOKS_COUNT; i++)
 		{
@@ -94,6 +102,7 @@ HelpMessageDialog::HelpMessageDialog(QWidget *parent, HelpMode helpMode, int iPr
 
 		connect(ui->comboBook, SIGNAL(currentIndexChanged(int)), SLOT(on_comboBookClicked(int)));
 		connect(ui->comboChapter, SIGNAL(currentIndexChanged(int)), SLOT(on_comboChapterClicked(int)));
+		connect(ui->comboLanguages, SIGNAL(currentIndexChanged(int)), SLOT(on_comboLanguagesClicked(int)));
 		std::string sTitle = "READ THE BIBLE";
 		std::string sPage = "Choose a Bible Book and Chapter below.";
 	    setWindowTitle(QString::fromStdString(sTitle));
@@ -137,6 +146,8 @@ HelpMessageDialog::HelpMessageDialog(QWidget *parent, HelpMode helpMode, int iPr
 		ui->comboChapter->setVisible(false);
 		ui->lblChapter->setVisible(false);
 		ui->lblBook->setVisible(false);
+		ui->lblLanguages->setVisible(false);
+		ui->comboLanguages->setVisible(false);
     }
 	else if (helpMode == cmdline) 
 	{
@@ -280,6 +291,21 @@ std::string ReplaceLineBreaksInUL(std::string sUL)
 	return sUL;
 }
 
+void HelpMessageDialog::on_comboLanguagesClicked(int iClick)
+{
+	std::string sLang = GUIUtil::FROMQS(ui->comboLanguages->currentText());
+	if (sLang == "English")
+	{
+		msLanguage = "EN";
+	}
+	else if (sLang == "Chinese")
+	{
+		msLanguage = "CN";
+	}
+	LogPrintf("Language changed to %s from %s.", msLanguage, sLang);
+	on_comboChapterClicked(0);
+}
+
 void HelpMessageDialog::on_comboBookClicked(int iClick)
 {
 	// Based on chosen Book, populate chapters
@@ -291,7 +317,7 @@ void HelpMessageDialog::on_comboBookClicked(int iClick)
 	ui->comboChapter->clear();
 	for (int iChapter = 1; iChapter < 99; iChapter++)
 	{
-		std::string sVerse = GetVerse(sReversed,iChapter,1,iStart,iEnd);
+		std::string sVerse = GetVerseML(msLanguage, sReversed, iChapter, 1, iStart, iEnd);
 		if (!sVerse.empty())
 		{
 			ui->comboChapter->addItem(GUIUtil::TOQS("Chapter " + RoundToString(iChapter,0)));
@@ -318,7 +344,7 @@ void HelpMessageDialog::on_comboChapterClicked(int iClick)
 	std::string sText;
 	for (int iVerse = 1; iVerse < 99; iVerse++)
 	{
-		std::string sVerse = GetVerse(sReversed,iChapter,iVerse,iStart,iEnd);
+		std::string sVerse = GetVerseML(msLanguage, sReversed, iChapter, iVerse, iStart, iEnd);
 		if (!sVerse.empty())
 		{
 			sText += RoundToString(iChapter,0) + ":" + RoundToString(iVerse,0) + "     &nbsp;     " + sVerse + "\n\n";
