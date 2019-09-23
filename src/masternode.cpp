@@ -422,10 +422,14 @@ bool CMasternodeBroadcast::Create(const std::string& strService, const std::stri
     if (!Lookup(strService.c_str(), service, 0, false))
         return Log(strprintf("Invalid address %s for masternode.", strService));
     int mainnetDefaultPort = Params(CBaseChainParams::MAIN).GetDefaultPort();
-    if (Params().NetworkIDString() == CBaseChainParams::MAIN) {
+    if (Params().NetworkIDString() == CBaseChainParams::MAIN) 
+	{
         if (service.GetPort() != mainnetDefaultPort)
-            return Log(strprintf("Invalid port %u for masternode %s, only %d is supported on mainnet.", service.GetPort(), strService, mainnetDefaultPort));
-    } else if (service.GetPort() == mainnetDefaultPort)
+		{
+			if (fEnforceSanctuaryPort)
+				return Log(strprintf("Invalid port %u for masternode %s, only %d is supported on mainnet.", service.GetPort(), strService, mainnetDefaultPort));
+		}
+    } else if (Params().NetworkIDString() != CBaseChainParams::MAIN && service.GetPort() == mainnetDefaultPort)
         return Log(strprintf("Invalid port %u for masternode %s, %d is the only supported on mainnet.", service.GetPort(), strService, mainnetDefaultPort));
 
     return Create(outpoint, service, keyCollateralAddressNew, pubKeyCollateralAddressNew, keyMasternodeNew, pubKeyMasternodeNew, strErrorRet, mnbRet);
@@ -522,9 +526,13 @@ bool CMasternodeBroadcast::SimpleCheck(int& nDos)
     }
 
     int mainnetDefaultPort = Params(CBaseChainParams::MAIN).GetDefaultPort();
-    if(Params().NetworkIDString() == CBaseChainParams::MAIN) {
-        if(addr.GetPort() != mainnetDefaultPort) return false;
-    } else if(addr.GetPort() == mainnetDefaultPort) return false;
+    if(Params().NetworkIDString() == CBaseChainParams::MAIN) 
+	{
+        if(fEnforceSanctuaryPort && addr.GetPort() != mainnetDefaultPort)
+			return false;
+    }
+	else if(Params().NetworkIDString() != CBaseChainParams::MAIN && addr.GetPort() == mainnetDefaultPort)
+		return false;
 
     return true;
 }

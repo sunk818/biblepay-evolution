@@ -242,6 +242,7 @@ public:
 		consensus.DIP0003EnforcementHeight = 133891;
 		consensus.DIP0003HeightPhase2 = 133891;
 		consensus.LLMQHeight = 200000; // CRITICAL TODO:  Lets set this height at the go-live height for .14; as our current .13 branch is not producing fully acceptable LLMQ quorums yet.
+		consensus.nSanctuaryPaymentsPhaseIIHeight = 200000; // Critical TODO:  Set this at the Go-Live height for .14 
 
 		consensus.QTHeight = 124000;  // Note to future forkers of BiblePay!  This height must be > (BLOCKS_PER_DAY * 32)!  Thank you for forking biblepay and thank you for your support!
 		consensus.powLimit = uint256S("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); 
@@ -437,6 +438,7 @@ public:
 		consensus.DIP0003EnforcementHeight = 8400;
 		consensus.DIP0003HeightPhase2 = 7000;
 		consensus.LLMQHeight = 7000;
+		consensus.nSanctuaryPaymentsPhaseIIHeight = 8400;
 
         consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); 
         consensus.nPowTargetTimespan = 24 * 60 * 60; // Biblepay: 1 day
@@ -553,10 +555,11 @@ public:
 		{
 			boost::assign::map_list_of
 				(1,     uint256S("0xde31388eddd9e0ea515353628a0ca1f167466f09c45b10354de10459c7c018f2"))
+				(5000,  uint256S("0xc63bfaaddcb4714c594b701ae8bd6320cef3221df7b33d781d0400ca5a1348b9"))
 		};
 
         chainTxData = ChainTxData{
-            1556884844, // * UNIX timestamp of last known number of transactions
+            1568991927, // * UNIX timestamp of last known number of transactions
             54664,       // * total number of transactions between genesis and that timestamp
                         //   (the tx=... number in the SetBestChain debug.log lines)
             0.01        // * estimated number of transactions per second after that timestamp

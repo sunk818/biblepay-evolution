@@ -165,6 +165,7 @@ extern int miGlobalPrayerIndex;
 extern int miGlobalDiaryIndex;
 extern SecureString msEncryptedString;
 extern std::string sOS;
+extern bool fEnforceSanctuaryPort;
 extern std::string msGithubVersion;
 extern std::string msLanguage;
 extern std::string msSessionID;

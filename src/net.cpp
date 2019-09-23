@@ -2038,7 +2038,11 @@ void CConnman::ThreadOpenAddedConnections()
 		AddNode("dns3.biblepay.org");  // Rob
 		AddNode("dns4.biblepay.org");  // Rob
 		AddNode("dns5.biblepay.org");  // Rob
-		if (!fProd) AddNode("testnet.biblepay.org");
+		if (!fProd) 
+		{
+			AddNode("testnet.biblepay.org");
+			AddNode("testnet1.biblepay.org");
+		}
 		if (!fProd) AddNode("test.dnsseed.biblepay-explorer.org"); // Alex 
 
         if (mapMultiArgs.count("-addnode"))

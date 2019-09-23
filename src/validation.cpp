@@ -121,6 +121,7 @@ std::string msLanguage;
 std::string msMasterNodeLegacyPrivKey;
 std::string msSessionID;
 std::string sOS;
+bool fEnforceSanctuaryPort = false;
 int PRAYER_MODULUS = 0;
 int miGlobalPrayerIndex = 0;
 int miGlobalDiaryIndex = 0;
@@ -1298,7 +1299,18 @@ CAmount GetBlockSubsidy(int nPrevBits, int nPrevHeight, const Consensus::Params&
 	// The remaining 50% is split between the miner and the sanctuary.
 	// https://wiki.biblepay.org/Economics
 
-	double dGovernancePercent = .485;
+	// In Phase 2: https://forum.biblepay.org/index.php?topic=435.0 : GSC budget is reduced to 25% from 30%
+
+	double dGovernancePercent = 0;
+	if (nPrevHeight > consensusParams.nSanctuaryPaymentsPhaseIIHeight)
+	{
+		dGovernancePercent = .45;
+	}
+	else
+	{
+		dGovernancePercent = .485;
+	}
+
 	CAmount nSuperblockPart = (nPrevHeight > consensusParams.nBudgetPaymentsStartBlock) ? nSubsidy * dGovernancePercent : 0;
 	CAmount nNetSubsidy = nSubsidy - nSuperblockPart;
 	return fSuperblockPartOnly ? nSuperblockPart : nNetSubsidy;
@@ -1308,8 +1320,19 @@ CAmount GetMasternodePayment(int nHeight, CAmount blockValue)
 {
 	// https://wiki.biblepay.org/Economics
 	// http://forum.biblepay.org/index.php?topic=33.0
-	// Sanctuaries receive half of the POW-POBH reward
-	CAmount ret = .50 * blockValue;
+	// Sanctuaries receive half of the POW-POBH reward in Phase 1 (July 2017 through December 2019)
+
+	// In phase 2: https://forum.biblepay.org/index.php?topic=435.0 : Sanctuaries receive 64% of the net block value (35% of the gross block reward)
+	const Consensus::Params& consensusParams = Params().GetConsensus();
+	CAmount ret = 0;
+	if (nHeight > consensusParams.nSanctuaryPaymentsPhaseIIHeight) 
+	{
+		ret = .64 * blockValue;
+	}
+	else
+	{
+		ret = .50 * blockValue;
+	}
 	return ret;
 }
 

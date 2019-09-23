@@ -130,6 +130,8 @@ struct Params {
     int nBudgetPaymentsStartBlock;
     int nBudgetPaymentsCycleBlocks;
     int nBudgetPaymentsWindowBlocks;
+	int nSanctuaryPaymentsPhaseIIHeight;
+
     int nSuperblockStartBlock;
     uint256 nSuperblockStartHash;
     int nSuperblockCycle; // in blocks

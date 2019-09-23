@@ -29,11 +29,12 @@ static bool CheckService(const uint256& proTxHash, const ProTx& proTx, CValidati
     }
 
     int mainnetDefaultPort = Params(CBaseChainParams::MAIN).GetDefaultPort();
-    if (Params().NetworkIDString() == CBaseChainParams::MAIN) {
-        if (proTx.addr.GetPort() != mainnetDefaultPort) {
+    if (Params().NetworkIDString() == CBaseChainParams::MAIN) 
+	{
+        if (proTx.addr.GetPort() != mainnetDefaultPort && fEnforceSanctuaryPort) {
             return state.DoS(10, false, REJECT_INVALID, "bad-protx-addr-port");
         }
-    } else if (proTx.addr.GetPort() == mainnetDefaultPort) {
+    } else if (proTx.addr.GetPort() == mainnetDefaultPort && Params().NetworkIDString() != CBaseChainParams::MAIN) {
         return state.DoS(10, false, REJECT_INVALID, "bad-protx-addr-port");
     }
 
