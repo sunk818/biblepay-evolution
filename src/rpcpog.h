@@ -43,6 +43,14 @@ struct CPK
   bool fValid = false;
 };
 
+struct BBPResult
+{
+	std::string Response;
+	bool fError = false;
+	std::string ErrorCode;
+};
+
+
 struct BiblePayProposal
 {
 	std::string sName;
@@ -217,5 +225,7 @@ std::string DSQL_Ansi92Query(std::string sSQL);
 double GetROI(double nTitheAmount);
 void ProcessBLSCommand(CTransactionRef tx);
 void UpdateHealthInformation();
+BBPResult GetDecentralizedURL();
+std::string BIPFS_Payment(CAmount nAmount, std::string sTXID, std::string sXML);
 
 #endif

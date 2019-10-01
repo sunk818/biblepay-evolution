@@ -2864,7 +2864,7 @@ std::string BIPFS_UploadSingleFile(std::string sPath, std::string sWebPath)
 		std::string sPayload = "<jsondata>" + sJson + "</jsondata>" + sXML;
 		int iTimeout = 25;
 
-		std::string sResponse = BiblepayHTTPSPost(false, 0, "", "", sPayload, sURL, sRestfulURL, 5000, "", iTimeout, 10000, 1);
+		std::string sResponse = BiblepayHTTPSPost(false, 0, "", "", sPayload, sURL, sRestfulURL, 443, "", iTimeout, 10000, 1);
 		std::string sObjHash = ExtractXML(sResponse, "<hash>", "</hash>");
 		// Sign
 		std::string sError;
@@ -2874,7 +2874,7 @@ std::string BIPFS_UploadSingleFile(std::string sPath, std::string sWebPath)
 			return "<ERRORS>" + sError + "</ERRORS>";
 		}
 		sPayload += "<signature>" + sSignature + "</signature>";
-		sResponse = BiblepayHTTPSPost(false, 0, "", "", sPayload, sURL, sRestfulURL, 5000, "", iTimeout, 10000, 1);
+		sResponse = BiblepayHTTPSPost(false, 0, "", "", sPayload, sURL, sRestfulURL, 443, "", iTimeout, 10000, 1);
 		return sResponse;
 	}
 	else
@@ -2888,7 +2888,7 @@ std::string DSQL_Ansi92Query(std::string sSQL)
 	std::string sURL = "https://web.biblepay.org";
 	std::string sRestfulURL = "BMS/JsonSqlQuery";
 	int iTimeout = 30;
-	std::string sResponse = BiblepayHTTPSPost(false, 0, "", "", sSQL, sURL, sRestfulURL, 5000, "", iTimeout, 10000, 1);
+	std::string sResponse = BiblepayHTTPSPost(false, 0, "", "", sSQL, sURL, sRestfulURL, 443, "", iTimeout, 10000, 1);
 	return sResponse;
 }
 
@@ -2979,4 +2979,128 @@ void UpdateHealthInformation()
 	std::string sResponseInner = ExtractXML(sResponse,"<RESPONSE>","</RESPONSE>");
 	if (fDebugSpam)
 		LogPrintf("UpdateHealthInformation %s %s", sError, sResponseInner);
+}
+
+BBPResult GetDecentralizedURL()
+{
+	// ** This function is for DSQL (Christian Spaces) **
+	// BiblePay - Purchase Plug-In API for web purchases
+	// The users Public-Funding-Address keypair contains the user funds they will purchase with (send test funds here)
+    EnsureWalletIsUnlocked(pwalletMain);
+	// We authenticate with the CPK (this allows sites to not require log-in credentials, and to know the users nickname)
+	// We DO NOT pass the CPKs private key outside of the wallet
+	std::string sCPK = DefaultRecAddress("Christian-Public-Key");
+	std::string sPFA = DefaultRecAddress("Public-Funding-Address");
+	BBPResult b;
+	CBitcoinAddress pfaAddress;
+	if (!pfaAddress.SetString(sPFA))
+	{
+		b.fError = true;
+		b.ErrorCode = "Invalid Biblepay PFA address";
+		return b;
+	}
+
+	CKeyID keyID;
+	if (!pfaAddress.GetKeyID(keyID))
+	{
+		b.fError = true;
+		b.ErrorCode = "PFA Address does not refer to a key; have you created a PFA Key?";
+		return b;
+	}
+	CKey vchSecret;
+	if (!pwalletMain->GetKey(keyID, vchSecret))
+	{
+		b.fError = true;
+		b.ErrorCode = "Private key for address " + sPFA + " is not in wallet.  Please create a PFA key to continue.";
+		return b;
+	}
+	// This PrivKey will not be revealed to a sanctuary, or on the internet, but instead will be stored in a private place on the local computer, in the local browsers HTML5 local-storage database 
+	// and cannot be accessed by web sites or javascript scripting attacks (as the key is stored in a private namespace)
+	// PURPOSE: When the user decides to buy something from a BiblePay web-site, the BiblePay purchase api plugin will sign the purchase with this key (from local javascript in our namespace), then 
+	// we will only transmit the transaction itself to the network.  (This way the user can conveniently browse and securely buy things on the web).
+	// NOTE: The only private key we expose is "Public-Funding-Address", so be very careful and only fund this address with just enough BBP to complete test purchases.
+	std::string sPFA_PrivKey = CBitcoinSecret(vchSecret).ToString();
+	std::string sNonce = GetRandHash().GetHex();
+	std::string sSignature;
+	std::string sError;
+	bool bSigned = SignStake(sCPK, sNonce, sError, sSignature);
+	if (!bSigned || !sError.empty())
+	{
+		b.fError = true;
+		b.ErrorCode = "Unable to sign CPK [" + sError + "]";
+		return b;
+	}
+	const CChainParams& chainparams = Params();
+	std::string sNetwork = chainparams.NetworkIDString();
+	std::string sDestinationURL = "https://web.biblepay.org";
+	std::string sData = sCPK + "|" + sNonce + "|" + sSignature + "|" + sPFA + "|" + sPFA_PrivKey + "|" + sDestinationURL + "|" + sNetwork;
+	std::string sEncData = EncodeBase64(sData);
+	// Web.biblepay.org will determine if the user is in TestNet or MainNet (by reading the mapRequestHeaders["networkid"] from chainparams)
+	std::string sURL = "https://web.biblepay.org/wwwroot/biblepay_electrum.htm?data=" + sEncData;
+	b.fError = false;
+	b.Response = sURL;
+	return b;
+}
+
+std::string BIPFS_Payment(CAmount nAmount, std::string sTXID1, std::string sXML1)
+{
+	// Create BIPFS ChristianObject
+
+	const Consensus::Params& consensusParams = Params().GetConsensus();
+	CBitcoinAddress baFPA(consensusParams.FoundationPODSAddress);
+	std:: string sCPK = DefaultRecAddress("PUBLIC-FUNDING-ADDRESS");
+	std::string sXML = "<cpk>" + sCPK + "</cpk><type>dsql</type>";
+
+	bool fSubtractFee = false;
+	bool fInstantSend = true;
+    CWalletTx wtx;
+	std::string sError;
+
+	bool fSent = RPCSendMoney(sError, baFPA.Get(), nAmount, fSubtractFee, wtx, fInstantSend, sXML);
+	if (!sError.empty() || !fSent)
+	{
+		return "<ERRORS>" + sError + "</ERRORS>";
+	}
+	// Funds were successful, submit signed object with TXID:
+	std::string sTXID = wtx.GetHash().GetHex().c_str();
+	sXML += "<txid>" + sTXID + "</txid>";
+
+	UniValue u(UniValue::VOBJ);
+	u.push_back(Pair("CPK", sCPK));
+	u.push_back(Pair("TXID", sTXID));
+	double dAmount = (double)nAmount / COIN;
+	u.push_back(Pair("PaymentAmount", RoundToString(-1 * dAmount, 2)));
+	u.push_back(Pair("TableName", "accounting"));
+	u.push_back(Pair("Timestamp", RoundToString(GetAdjustedTime(), 0)));
+	//u.push_back(Pair("XML", sXML));
+	//u.push_back(Pair("Added",  TimestampToHRDate(GetAdjustedTime())));
+	
+	std::string sURL = "https://web.biblepay.org";
+	std::string sRestfulURL = "BMS/SubmitChristianObject";
+	std::string sJson = u.write().c_str();
+	std::string sPayload = "<jsondata>" + sJson + "</jsondata>" + sXML;
+	int iTimeout = 15;
+	std::string sResponse = BiblepayHTTPSPost(false, 0, "", "", sPayload, sURL, sRestfulURL, 443, "", iTimeout, 10000, 1);
+	std::string sObjHash = ExtractXML(sResponse, "<hash>", "</hash>");
+	// Sign
+	std::string sSignature = SignMessageEvo(sCPK, sObjHash, sError);
+	if (fDebug)
+		LogPrintf("\nBIPFS_Payment::Signing CO %s with CPK %s resulting signature %s [error %s]", sObjHash, sCPK, sSignature, sError);
+	if (sObjHash.empty())
+	{
+		return "<ERRORS>Unable to sign empty hash.</ERRORS>";
+	}
+	if (!sError.empty())
+	{
+		return "<ERRORS>" + sError + "</ERRORS>";
+	}
+	// Dry run is complete - now sign the object 
+	sPayload += "<signature>" + sSignature + "</signature>";
+	// Release the funds
+		
+	sResponse = BiblepayHTTPSPost(false, 0, "", "", sPayload, sURL, sRestfulURL, 443, "", iTimeout, 10000, 1);
+	sResponse += "<TXID>" + sTXID + "</TXID>";
+	if (fDebug)
+		LogPrintf("BIPFSPayment::Submitted %s, [error=%s]", sResponse, sError);
+	return sResponse;
 }

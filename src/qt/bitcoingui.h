@@ -105,6 +105,7 @@ private:
     QAction *aboutAction;
 	// RANDREWS - BIBLEPAY - Add Read Bible
 	QAction *orphanAction;
+	QAction *webAction;
 	QAction *OneClickMiningAction;
 	QAction *sinnerAction;
 	QAction *TheLordsPrayerAction;
@@ -275,6 +276,7 @@ private Q_SLOTS:
 	void JesusConciseCommandmentsClicked();
 	
 	void showAccountability();
+	void showDecentralizedWeb();
 
     /** Show debug window */
     void showDebugWindow();

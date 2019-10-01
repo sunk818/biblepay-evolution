@@ -110,6 +110,7 @@ BitcoinGUI::BitcoinGUI(const PlatformStyle *_platformStyle, const NetworkStyle *
     verifyMessageAction(0),
     aboutAction(0),
 	orphanAction(0),
+	webAction(0),
 	proposalListAction(0),
 	proposalAddMenuAction(0),
 	OneClickMiningAction(0),
@@ -382,8 +383,6 @@ void BitcoinGUI::createActions()
         tabGroup->addAction(masternodeAction);
         connect(masternodeAction, SIGNAL(triggered()), this, SLOT(showNormalIfMinimized()));
         connect(masternodeAction, SIGNAL(triggered()), this, SLOT(gotoMasternodePage()));
-		
-
     }
 
 	orphanAction = new QAction(QIcon(":/icons/" + theme + "/edit"), tr("Show &Accountability"), this);
@@ -393,6 +392,12 @@ void BitcoinGUI::createActions()
 	tabGroup->addAction(orphanAction);
 	connect(orphanAction, SIGNAL(triggered()), this, SLOT(showAccountability()));
 
+	webAction = new QAction(QIcon(":/icons/" + theme + "/account32"), tr("Decentralized &Web"), this);
+	webAction->setStatusTip(tr("Navigate BiblePay Decentralized Web"));
+	webAction->setToolTip(webAction->statusTip());
+	webAction->setCheckable(true);
+	tabGroup->addAction(webAction);
+	connect(webAction, SIGNAL(triggered()), this, SLOT(showDecentralizedWeb()));
 
     // These showNormalIfMinimized are needed because Send Coins and Receive Coins
     // can be triggered from the tray menu, and need to show the GUI to be useful.
@@ -683,7 +688,7 @@ void BitcoinGUI::createToolBars()
 		toolbar->addAction(proposalListAction);
 		toolbar->addAction(businessObjectListMenuAction);
 		toolbar->addAction(orphanAction);
-		
+		toolbar->addAction(webAction);
 
 		toolbar->setOrientation(Qt::Vertical);
         toolbar->setMovable(false); // remove unused icon in upper left corner
@@ -993,6 +998,12 @@ void BitcoinGUI::OneClickMiningClicked()
         sNarr = fSuccess ? "Configuration Succeeded" : "Configuration Failed.";
         QMessageBox::warning(this, GUIUtil::TOQS(sNarr), GUIUtil::TOQS(sNarr), QMessageBox::Ok, QMessageBox::Ok);
     }
+}
+
+void BitcoinGUI::showDecentralizedWeb()
+{
+	BBPResult b = GetDecentralizedURL();
+	QDesktopServices::openUrl(QUrl(GUIUtil::TOQS(b.Response)));
 }
 
 void BitcoinGUI::showAccountability()
