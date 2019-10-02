@@ -1858,7 +1858,7 @@ bool TermPeekFound(std::string sData, int iBOEType)
 std::string PrepareHTTPPost(bool bPost, std::string sPage, std::string sHostHeader, const std::string& sMsg, const std::map<std::string,std::string>& mapRequestHeaders)
 {
 	std::ostringstream s;
-	std::string sUserAgent = "Mozilla/5.0";
+	std::string sUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.80 Safari/537.36";
 	std::string sMethod = bPost ? "POST" : "GET";
 
 	s << sMethod + " /" + sPage + " HTTP/1.1\r\n"
@@ -1875,7 +1875,6 @@ std::string PrepareHTTPPost(bool bPost, std::string sPage, std::string sHostHead
 }
 
 static double HTTP_PROTO_VERSION = 2.0;
-
 std::string BiblepayHTTPSPost(bool bPost, int iThreadID, std::string sActionName, std::string sDistinctUser, std::string sPayload, std::string sBaseURL, std::string sPage, int iPort, 
 	std::string sSolution, int iTimeoutSecs, int iMaxSize, int iBOE)
 {
@@ -1912,6 +1911,14 @@ std::string BiblepayHTTPSPost(bool bPost, int iThreadID, std::string sActionName
 		bio = BIO_new_ssl_connect(ctx);
 		std::string sDomain = GetDomainFromURL(sBaseURL);
 		std::string sDomainWithPort = sDomain + ":" + RoundToString(iPort, 0);
+
+		// Compatibility with strict d-dos prevention rules (like cloudflare)
+		SSL * ssl(nullptr);
+		BIO_get_ssl(bio, &ssl);
+		SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
+		SSL_set_tlsext_host_name(ssl, const_cast<char *>(sDomain.c_str()));
+		BIO_set_conn_int_port(bio, &iPort);
+
 		BIO_set_conn_hostname(bio, sDomainWithPort.c_str());
 		if(BIO_do_connect(bio) <= 0)
 		{
@@ -1983,6 +1990,23 @@ std::string BiblepayHTTPSPost(bool bPost, int iThreadID, std::string sActionName
 	{
 		return "<ERROR>GENERAL_WEB_EXCEPTION</ERROR>";
 	}
+}
+
+static std::string DECENTRALIZED_SERVER_FARM = "web.biblepay.org";
+static std::string SSL_PROTOCOL_WEB = "https://";
+static int SSL_PORT = 443;
+static int SSL_TIMEOUT = 15;
+static int SSL_CONN_TIMEOUT = 10000;
+BBPResult DSQL(UniValue uObject, std::string sXML)
+{
+	std::string sEndpoint = SSL_PROTOCOL_WEB + DECENTRALIZED_SERVER_FARM;
+	std::string sMVC = "BMS/SubmitChristianObject";
+	std::string sJson = uObject.write().c_str();
+	std::string sPayload = "<jsondata>" + sJson + "</jsondata>" + sXML;
+	BBPResult b;
+	b.Response = BiblepayHTTPSPost(true, 0, "POST", "", sPayload, sEndpoint, sMVC, SSL_PORT, "", SSL_TIMEOUT, SSL_CONN_TIMEOUT, 1);
+	b.ErrorCode = ExtractXML(b.Response, "<ERRORS>", "<ERRORS>");
+	return b;
 }
 
 std::string BiblePayHTTPSPost2(bool bPost, std::string sProtocol, std::string sDomain, std::string sPage, std::string sPayload, std::string sFileName)
@@ -3055,6 +3079,14 @@ std::string BIPFS_Payment(CAmount nAmount, std::string sTXID1, std::string sXML1
 	bool fInstantSend = true;
     CWalletTx wtx;
 	std::string sError;
+	UniValue u(UniValue::VOBJ);
+	u.push_back(Pair("CPK", sCPK));
+	BBPResult b = DSQL(u, "");
+	std::string sObjHash = ExtractXML(b.Response, "<hash>", "</hash>");
+	if (sObjHash.empty())
+	{
+		return "<ERRORS>Unable to sign empty DSQL hash.</ERRORS>";
+	}
 
 	bool fSent = RPCSendMoney(sError, baFPA.Get(), nAmount, fSubtractFee, wtx, fInstantSend, sXML);
 	if (!sError.empty() || !fSent)
@@ -3065,23 +3097,14 @@ std::string BIPFS_Payment(CAmount nAmount, std::string sTXID1, std::string sXML1
 	std::string sTXID = wtx.GetHash().GetHex().c_str();
 	sXML += "<txid>" + sTXID + "</txid>";
 
-	UniValue u(UniValue::VOBJ);
-	u.push_back(Pair("CPK", sCPK));
 	u.push_back(Pair("TXID", sTXID));
 	double dAmount = (double)nAmount / COIN;
 	u.push_back(Pair("PaymentAmount", RoundToString(-1 * dAmount, 2)));
 	u.push_back(Pair("TableName", "accounting"));
 	u.push_back(Pair("Timestamp", RoundToString(GetAdjustedTime(), 0)));
-	//u.push_back(Pair("XML", sXML));
-	//u.push_back(Pair("Added",  TimestampToHRDate(GetAdjustedTime())));
-	
-	std::string sURL = "https://web.biblepay.org";
-	std::string sRestfulURL = "BMS/SubmitChristianObject";
-	std::string sJson = u.write().c_str();
-	std::string sPayload = "<jsondata>" + sJson + "</jsondata>" + sXML;
-	int iTimeout = 15;
-	std::string sResponse = BiblepayHTTPSPost(false, 0, "", "", sPayload, sURL, sRestfulURL, 443, "", iTimeout, 10000, 1);
-	std::string sObjHash = ExtractXML(sResponse, "<hash>", "</hash>");
+	b = DSQL(u, "");
+	sObjHash = ExtractXML(b.Response, "<hash>", "</hash>");
+
 	// Sign
 	std::string sSignature = SignMessageEvo(sCPK, sObjHash, sError);
 	if (fDebug)
@@ -3095,12 +3118,12 @@ std::string BIPFS_Payment(CAmount nAmount, std::string sTXID1, std::string sXML1
 		return "<ERRORS>" + sError + "</ERRORS>";
 	}
 	// Dry run is complete - now sign the object 
-	sPayload += "<signature>" + sSignature + "</signature>";
+	std::string sPayload = "<signature>" + sSignature + "</signature>";
 	// Release the funds
-		
-	sResponse = BiblepayHTTPSPost(false, 0, "", "", sPayload, sURL, sRestfulURL, 443, "", iTimeout, 10000, 1);
-	sResponse += "<TXID>" + sTXID + "</TXID>";
+	b = DSQL(u, sPayload);
+	b.Response += "<TXID>" + sTXID + "</TXID>";
 	if (fDebug)
-		LogPrintf("BIPFSPayment::Submitted %s, [error=%s]", sResponse, sError);
-	return sResponse;
+		LogPrintf("BIPFSPayment::Submitted %s, [error=%s]", b.Response, sError);
+	return b.Response;
 }
+
