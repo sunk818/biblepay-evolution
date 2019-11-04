@@ -58,37 +58,18 @@ std::string strReplace(std::string& str, const std::string& oldStr, const std::s
 
 bool SignStake(std::string sBitcoinAddress, std::string strMessage, std::string& sError, std::string& sSignature)
 {
-	LOCK(cs_main);
-	{	
-		// Unlock wallet if SecureKey is available
-		bool bTriedToUnlock = false;
-		if (pwalletMain->IsLocked() && !msEncryptedString.empty())
-		{
-			bTriedToUnlock = true;
-			if (!pwalletMain->Unlock(msEncryptedString, false))
-			{
-				static int nNotifiedOfUnlockIssue = 0;
-				if (nNotifiedOfUnlockIssue == 0)
-					LogPrintf("\nUnable to unlock wallet with SecureString.\n");
-				nNotifiedOfUnlockIssue++;
-				sError = "Unable to unlock wallet with autounlock password provided";
-				return false;
-			}
-		}
-
 		CBitcoinAddress addr(sBitcoinAddress);
 		CKeyID keyID;
 		if (!addr.GetKeyID(keyID))
 		{
 			sError = "Address does not refer to key";
-			if (bTriedToUnlock)		{ pwalletMain->Lock();	}
 			return false;
 		}
 		CKey key;
 		if (!pwalletMain->GetKey(keyID, key))
 		{
-			sError = "Private key not available";
-			if (bTriedToUnlock)		{ pwalletMain->Lock();	}
+			sError = "Private key not available for " + sBitcoinAddress + ".";
+			LogPrintf("Unable to sign message %s with key %s.\n", strMessage, sBitcoinAddress);
 			return false;
 		}
 		CHashWriter ss(SER_GETHASH, 0);
@@ -98,16 +79,11 @@ bool SignStake(std::string sBitcoinAddress, std::string strMessage, std::string&
 		if (!key.SignCompact(ss.GetHash(), vchSig))
 		{
 			sError = "Sign failed";
-			if (bTriedToUnlock)		{ pwalletMain->Lock();	}
 			return false;
 		}
 		sSignature = EncodeBase64(&vchSig[0], vchSig.size());
-		if (bTriedToUnlock)
-		{
-			pwalletMain->Lock();
-		}
+		LogPrintf("Signed message %s successfully with address %s \n", strMessage, sBitcoinAddress);
 		return true;
-	}
 }
 
 
@@ -156,6 +132,7 @@ std::string SendBlockchainMessage(std::string sType, std::string sPrimaryKey, st
 		return std::string();
     return wtx.GetHash().GetHex().c_str();
 }
+
 
 std::string GetGithubVersion()
 {
@@ -293,45 +270,6 @@ bool GetTransactionTimeAndAmount(uint256 txhash, int nVout, int64_t& nTime, CAmo
 	return false;
 }
 
-/*
-int64_t GetDCCFileTimestamp()
-{
-	std::string sDailyMagnitudeFile = GetSANDirectory2() + "magnitude";
-	boost::filesystem::path pathFiltered(sDailyMagnitudeFile);
-	if (!boost::filesystem::exists(pathFiltered)) return GetAdjustedTime() - 0;
-	int64_t nTime = last_write_time(pathFiltered);
-	return nTime;
-}
-*/
-
-bool IsMature(int64_t nTime, int64_t nMaturityAge)
-{
-	int64_t nNow = GetAdjustedTime();
-	int64_t nRemainder = nNow % nMaturityAge;
-	int64_t nCutoff = nNow - nRemainder;
-	bool bMature = nTime <= nCutoff;
-	return bMature;
-}
-
-int64_t GetDCCFileAge()
-{
-	std::string sDailyMagnitudeFile = GetSANDirectory2() + "magnitude";
-	boost::filesystem::path pathFiltered(sDailyMagnitudeFile);
-	// ST13 last_write_time error:  Rob A. - Biblepay - 2/8/2018
-	if (!boost::filesystem::exists(pathFiltered)) return GetAdjustedTime() - 0;
-	int64_t nTime = last_write_time(pathFiltered);
-	int64_t nAge = GetAdjustedTime() - nTime;
-	return nAge;
-}
-
-
-CAmount GetMoneySupplyEstimate(int nHeight)
-{
-	int64_t nAvgReward = 13657;
-	double nUnlockedSupplyPercentage = .40;
-	CAmount nSupply = nAvgReward * nHeight * nUnlockedSupplyPercentage * COIN;
-	return nSupply;
-}
 
 
 std::string rPad(std::string data, int minWidth)
@@ -341,5 +279,93 @@ std::string rPad(std::string data, int minWidth)
 	std::string sPadding = std::string(iPadding,' ');
 	std::string sOut = data + sPadding;
 	return sOut;
+}
+
+int64_t GetDCCFileAge()
+{
+	std::string sRACFile = GetSANDirectory2() + "wcg.rac";
+	boost::filesystem::path pathFiltered(sRACFile);
+	if (!boost::filesystem::exists(pathFiltered)) 
+		return GetAdjustedTime() - 0;
+	int64_t nTime = last_write_time(pathFiltered);
+	int64_t nAge = GetAdjustedTime() - nTime;
+	return nAge;
+}
+
+int GetWCGMemberID(std::string sMemberName, std::string sAuthCode, double& nPoints)
+{
+	std::string sDomain = "https://www.worldcommunitygrid.org";
+	std::string sRestfulURL = "verifyMember.do?name=" + sMemberName + "&code=" + sAuthCode;
+	std::string sResponse = BiblepayHTTPSPost(true, 0, "", "", "", sDomain, sRestfulURL, 443, "", 12, 14000, 1);
+	int iID = (int)cdbl(ExtractXML(sResponse, "<MemberId>","</MemberId>"), 0);
+	nPoints = cdbl(ExtractXML(sResponse, "<Points>", "</Points>"), 2);
+	return iID;
+}
+
+Researcher GetResearcherByID(int nID)
+{
+    BOOST_FOREACH(const PAIRTYPE(const std::string, Researcher)& myResearcher, mvResearchers)
+    {
+		if (myResearcher.second.found && myResearcher.second.id == nID)
+			return myResearcher.second;
+	}
+	Researcher r;
+	r.found = false;
+	r.teamid = 0;
+	return r;
+}
+
+std::map<std::string, Researcher> GetPayableResearchers()
+{
+	// Rules:
+
+	// Researcher is in the team (BiblePay or Gridcoin)
+	// RAC > 1 
+	// Researchers reverse CPID lookup matches the signed association record (this ensures the LIFO rule is honored allowing re-associations)
+	// Each CPID is only included ONCE
+	// The CPID is Unbanked if the RAC < 250
+	// Unbanked researchers do not need to post daily stake collateral
+	// Banked researchers do need to post daily stake collateral:  RAC^1.30 in COIN-AGE per day
+	std::map<std::string, Researcher> r;
+	std::map<std::string, std::string> cpid_reverse_lookup;
+	for (auto ii : mvApplicationCache)
+	{
+		if (Contains(ii.first.first, "CPK-WCG"))
+		{
+			std::string sData = ii.second.first;
+
+			std::string cpid = GetCPIDElementByData(sData, 8);
+			std::string sCPK = GetCPIDElementByData(sData, 0);
+			cpid_reverse_lookup[cpid] = sCPK;
+			LogPrintf("\nGPR0::Adding CPID %s for %s for data %s", cpid, sCPK, sData);
+		}
+	}
+	
+	
+	BOOST_FOREACH(const PAIRTYPE(const std::string, Researcher)& myResearcher, mvResearchers)
+    {
+		if (myResearcher.second.found)
+		{
+			if (myResearcher.second.teamid == 35006 || myResearcher.second.teamid == 30513)
+			{
+				std::string sSourceCPK = cpid_reverse_lookup[myResearcher.second.cpid];
+				std::string sSignedCPID = GetCPIDByCPK(sSourceCPK);
+				
+				if (sSignedCPID == myResearcher.second.cpid && !myResearcher.second.cpid.empty())
+				{
+					if (myResearcher.second.rac > 1)
+					{
+						r[sSignedCPID] = myResearcher.second;
+						LogPrintf("\nGetPayableResearchers::Adding %s for %s", sSignedCPID, sSourceCPK);
+					}
+				}
+				else
+				{
+					LogPrintf("\nGPR::Not Adding %s because %s", sSignedCPID, sSourceCPK);
+				}
+			}
+		}
+	}
+	return r;
 }
 

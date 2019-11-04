@@ -36,5 +36,10 @@ std::string GetTxCPK(CTransactionRef tx, std::string& sCampaignName);
 double CalculatePoints(std::string sCampaign, std::string sDiary, double nCoinAge, CAmount nDonation, std::string sCPK);
 double GetCameroonChildBalance(std::string sChildID);
 double GetProminenceCap(std::string sCampaignName, double nPoints, double nProminence);
+std::string GetCPIDByCPK(std::string sCPK);
+std::string GetCPIDElementByData(std::string sData, int iElement);
+double GetRequiredCoinAgeForPODC(double nRAC);
+double GetBBPPrice();
+bool VerifyChild(std::string childID);
 
 #endif

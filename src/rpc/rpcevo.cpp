@@ -1294,7 +1294,10 @@ UniValue sponsorchild(const JSONRPCRequest& request)
 	CAmount nFee = 50000 * COIN;
 	std::string sChildId = GetRandHash().GetHex().substr(0,8);
 	std::string sKey = sProject + "|" + sChildId;
-	bool fAdv = AdvertiseChristianPublicKeypair(sKey, "", "", "", false, false, nFee, sChildId, sError);
+	std::string sOptData = sChildId;
+	bool fForce = true;
+	bool fAdv = AdvertiseChristianPublicKeypair(sKey,          "", sOptData,     "", false, fForce, nFee, sChildId, sError);
+
     UniValue results(UniValue::VOBJ);
 	results.push_back(Pair("Results", fAdv));
 	if (!fAdv)
@@ -1365,24 +1368,19 @@ UniValue sendgscc(const JSONRPCRequest& request)
 	if (request.fHelp)
 		throw std::runtime_error(
 		"sendgscc"
-		"\nSends a generic smart contract campaign transmission and/or a donation to the foundation."
-		"\nYou must specify sendgscc campaign_name [foundation_donation_amount] [optional:diary_entry] : IE 'exec sendgscc healing 10 [\"prayed for Jane Doe who had broken ribs, this happened\"].");
+		"\nSends a generic smart contract campaign transmission."
+		"\nYou must specify sendgscc campaign_name [optional:diary_entry] : IE 'exec sendgscc healing [\"prayed for Jane Doe who had broken ribs, this happened\"].");
 	if (request.params.size() < 1 || request.params.size() > 3)
-		throw std::runtime_error("You must specify sendgscc campaign_name [foundation_donation_amount] [optional:diary_entry] : IE 'exec sendgscc healing 10 [\"prayed for Jane Doe who had broken ribs, this happened\"].");
+		throw std::runtime_error("You must specify sendgscc campaign_name [foundation_donation_amount] [optional:diary_entry] : IE 'exec sendgscc healing [\"prayed for Jane Doe who had broken ribs, this happened\"].");
 	std::string sDiary;
 	std::string sCampaignName;
 	if (request.params.size() > 0)
 	{
 		sCampaignName = request.params[0].get_str();
 	}
-	CAmount nFoundationDonationOverride = 0;
 	if (request.params.size() > 1)
 	{
-		nFoundationDonationOverride = cdbl(request.params[1].get_str(), 10) * COIN;
-	}
-	if (request.params.size() > 2)
-	{
-		sDiary = request.params[2].get_str();
+		sDiary = request.params[1].get_str();
 		if (sDiary.length() < 10)
 			throw std::runtime_error("Diary entry incomplete (must be 10 chars or more).");
 	}
@@ -1391,13 +1389,15 @@ UniValue sendgscc(const JSONRPCRequest& request)
 	WriteCache("gsc", "errors", "", GetAdjustedTime());
 	std::string sError;
     UniValue results(UniValue::VOBJ);
-	bool fCreated = CreateClientSideTransaction(true, false, sDiary, sError, nFoundationDonationOverride, sCampaignName);
+	bool fCreated = CreateGSCTransmission(true, sDiary, sError, sCampaignName);
+
 	if (!sError.empty())
 		results.push_back(Pair("Error!", sError));
 	std::string sFullError = ReadCache("gsc", "errors");
 	if (!sFullError.empty())
 		results.push_back(Pair("Error!", sFullError));
-
+	if (fCreated)
+		results.push_back(Pair("Results", fCreated));
  	return results;
 }
 
@@ -1426,6 +1426,77 @@ UniValue datalist(const JSONRPCRequest& request)
 	std::string sEntry;
 	UniValue aDataList = GetDataList(sType, (int)dDays, iSpecificEntry, "", sEntry);
 	return aDataList;
+}
+
+UniValue getpobhhash(const JSONRPCRequest& request)
+{
+	if (request.fHelp || request.params.size() != 1)
+		throw std::runtime_error("getpobhhash: returns a pobh hash for a given x11 hash");
+	std::string sInput = request.params[0].get_str();
+	uint256 hSource = uint256S("0x" + sInput);
+	uint256 h = BibleHashDebug(hSource, 0);
+    UniValue results(UniValue::VOBJ);
+	results.push_back(Pair("inhash", hSource.GetHex()));
+	results.push_back(Pair("outhash", h.GetHex()));
+	return results;
+}
+
+UniValue hexblocktocoinbase(const JSONRPCRequest& request)
+{
+	if (request.fHelp || request.params.size() != 1)
+		throw std::runtime_error("hexblocktocoinbase: returns block information used by the pool(s) for a given serialized hexblock.");
+
+	// This call is used by pools (pool.biblepay.org and purepool) to verify a serialized solution
+	std::string sBlockHex = request.params[0].get_str();
+	CBlock block;
+    if (!DecodeHexBlk(block, sBlockHex))
+           throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block decode failed");
+
+	UniValue results(UniValue::VOBJ);
+	
+    results.push_back(Pair("txid", block.vtx[0]->GetHash().GetHex()));
+	results.push_back(Pair("recipient", PubKeyToAddress(block.vtx[0]->vout[0].scriptPubKey)));
+	CBlockIndex* pindexPrev = chainActive.Tip();
+	bool f7000;
+	bool f8000;
+	bool f9000;
+	bool fTitheBlocksActive;
+	GetMiningParams(pindexPrev->nHeight, f7000, f8000, f9000, fTitheBlocksActive);
+	const Consensus::Params& consensusParams = Params().GetConsensus();
+	uint256 hash = BibleHashClassic(block.GetHash(), block.GetBlockTime(), pindexPrev->nTime, true, pindexPrev->nHeight, NULL, false, f7000, f8000, f9000, fTitheBlocksActive, block.nNonce, consensusParams);
+	results.push_back(Pair("biblehash", hash.GetHex()));
+	results.push_back(Pair("blockhash", block.GetHash().GetHex()));
+	results.push_back(Pair("nonce", (uint64_t)block.nNonce));
+	results.push_back(Pair("version", block.nVersion));
+	results.push_back(Pair("versionHex", strprintf("%08x", block.nVersion)));
+	results.push_back(Pair("nTime", block.GetBlockTime()));
+	results.push_back(Pair("subsidy", block.vtx[0]->vout[0].nValue/COIN));
+	results.push_back(Pair("blockversion", GetBlockVersion(block.vtx[0]->vout[0].sTxOutMessage)));
+	std::string sMsg;
+	for (unsigned int i = 0; i < block.vtx[0]->vout.size(); i++)
+	{
+		sMsg += block.vtx[0]->vout[i].sTxOutMessage;
+	}
+	// Include abn weight in the reply
+	double nABNWeight = GetABNWeight(block, false);
+	double nMinRequiredABNWeight = GetSporkDouble("requiredabnweight", 0);
+	double nABNHeight = GetSporkDouble("abnheight", 0);
+	bool fABNPassed = true;
+	if (nABNHeight > consensusParams.ABNHeight && pindexPrev->nHeight > nABNHeight && nMinRequiredABNWeight > 0 && !LateBlock(block, pindexPrev, 60) && !LateBlockIndex(pindexPrev, 60))
+	{
+	    if (nABNWeight < nMinRequiredABNWeight) 
+			fABNPassed = false;
+	} 
+	results.push_back(Pair("requiredabnweight", nMinRequiredABNWeight));
+	results.push_back(Pair("block_abn_weight", nABNWeight));
+	results.push_back(Pair("abn_passed", fABNPassed));
+	results.push_back(Pair("blockmessage", sMsg));
+	results.push_back(Pair("height", pindexPrev->nHeight + 1));
+	arith_uint256 hashTarget = arith_uint256().SetCompact(block.nBits);
+	results.push_back(Pair("target", hashTarget.GetHex()));
+	results.push_back(Pair("bits", strprintf("%08x", block.nBits)));
+	results.push_back(Pair("merkleroot", block.hashMerkleRoot.GetHex()));
+	return results;
 }
 
 UniValue listchildren(const JSONRPCRequest& request)
@@ -1614,6 +1685,8 @@ static const CRPCCommand commands[] =
 	{ "evo",                "books",                        &books,                         false, {}  },
 	{ "evo",                "datalist",                     &datalist,                      false, {}  },
 	{ "evo",                "getchildbalance",              &getchildbalance,               false, {}  },
+	{ "evo",                "hexblocktocoinbase",           &hexblocktocoinbase,            false, {}  },
+	{ "evo",                "getpobhhash",                  &getpobhhash,                   false, {}  },
     { "evo",                "bls",                          &_bls,                          false, {}  },
     { "evo",                "protx",                        &protx,                         false, {}  },
 	{ "evo",                "createnonfinancialtransaction",&createnonfinancialtransaction, false, {}  },

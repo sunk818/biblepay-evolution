@@ -762,7 +762,6 @@ bool CCryptoKeyStore::AddKeyPubKey(const CKey& key, const CPubKey &pubkey)
     return true;
 }
 
-
 bool CCryptoKeyStore::AddCryptedKey(const CPubKey &vchPubKey, const std::vector<unsigned char> &vchCryptedSecret)
 {
     {
@@ -790,6 +789,7 @@ bool CCryptoKeyStore::GetKey(const CKeyID &address, CKey& keyOut) const
             return DecryptKey(vMasterKey, vchCryptedSecret, vchPubKey, keyOut);
         }
     }
+	
     return false;
 }
 

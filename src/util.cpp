@@ -649,6 +649,14 @@ boost::filesystem::path GetMasternodeConfigFile()
     return pathConfigFile;
 }
 
+boost::filesystem::path GetDeterministicConfigFile()
+{
+    boost::filesystem::path pathConfigFile(GetArg("-mndeterministicconf", "deterministic.conf"));
+    if (!pathConfigFile.is_complete())
+        pathConfigFile = GetDataDir() / pathConfigFile;
+    return pathConfigFile;
+}
+
 void ClearDatadirCache()
 {
     LOCK(csPathCached);

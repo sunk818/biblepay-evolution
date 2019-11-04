@@ -901,6 +901,33 @@ bool IsMyABNSufficient(CBlock block, CBlockIndex* pindexPrev, int nHeight)
 	return true;
 }
 
+
+bool CreateBlockForStratum(std::string sAddress, std::string& sError, CBlock& blockX)
+{
+	// Create Evo block
+	bool fFunded = false;
+	std::string sMinerGuid;
+	int iThreadID = 0;
+	boost::shared_ptr<CReserveScript> coinbaseScript;
+    GetMainSignals().ScriptForMining(coinbaseScript);
+	std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(Params()).CreateNewBlock(coinbaseScript->reserveScript, 
+		sAddress, sMinerGuid, iThreadID, fFunded));
+	if (!pblocktemplate.get())
+    {
+		LogPrint("miner", "CreateBlockForStratum::No block to mine %f", iThreadID);
+		sError = "Wallet Locked/ABN Required";
+		SpendABN();
+		return false;
+    }
+	CBlock *pblock = &pblocktemplate->block;
+	int iStart = rand() % 65536;
+	unsigned int nExtraNonce = GetAdjustedTime() + iStart; // This is the Extra Nonce (not the nonce); this helps put every miner on their own private hash in the pool (since they don't have a distinct receiving address)
+	CBlockIndex* pindexPrev = chainActive.Tip();
+	IncrementExtraNonce(pblock, pindexPrev, nExtraNonce);
+	blockX = const_cast<CBlock&>(*pblock);
+	return true;
+}	
+
 void static BibleMiner(const CChainParams& chainparams, int iThreadID, int iFeatureSet)
 {
 	LogPrintf("BibleMiner -- started thread %f \n", (double)iThreadID);
@@ -1009,18 +1036,26 @@ recover:
             CBlockIndex* pindexPrev = chainActive.Tip();
             if(!pindexPrev) break;
 
-			// POG - R ANDREWS - 12/6/2018 - Once every gscclientminerfrequency, call the gsc client side and create applicable transactions
-			int64_t nGSCAge = GetAdjustedTime() - nLastGSC;
-			if (iThreadID == 0 && (nGSCAge > nGSCFrequency))
+			// R Andrews - 10-31-2018 - Move this to the main thread, so we can support external mining programs:
+			/*
+			if (false)
 			{
-				nLastGSC = GetAdjustedTime();
-				std::string sError;
-				bool fCreated = CreateClientSideTransaction(false, false, "", sError);
-				if (!fCreated)
+				// POG - R ANDREWS - 12/6/2018 - Once every gscclientminerfrequency, call the gsc client side and create applicable transactions
+				int64_t nGSCAge = GetAdjustedTime() - nLastGSC;
+				if (iThreadID == 0 && (nGSCAge > nGSCFrequency))
 				{
-					LogPrintf("\nBibleMiner::Unable to create client side GSC transaction. (See Log [%s]). %f", sError, iThreadID);
+					nLastGSC = GetAdjustedTime();
+					std::string sError;
+					bool fCreated = ientSideTransaction(false, false, "", sError);
+					if (!fCreated)
+					{
+						LogPrintf("\nBibleMiner::Unable to create client side GSC transaction. (See Log [%s]). %f", sError, iThreadID);
+					}
 				}
 			}
+			*/
+
+
 
 			if (!fProd && mempool.size() == 0 && GetSporkDouble("SLEEP_DURING_EMPTY_BLOCKS", 0) == 1)
                 MilliSleep(1000 * 60 * 7);

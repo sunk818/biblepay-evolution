@@ -1761,6 +1761,11 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
     initkjv();
     uiInterface.InitMessage(_("Loading Chinese (CNV) Bible..."));
 	initcnv();
+
+	// Load Researchers into RAM
+	uiInterface.InitMessage(_("Loading PODC Researchers..."));
+	LoadResearchers();
+
     // ********************************************************* Step 7a: check lite mode and load sporks
 
     // lite mode disables all Biblepay-specific functionality

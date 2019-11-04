@@ -116,6 +116,8 @@ std::map<uint256, int64_t> mapRejectedBlocks GUARDED_BY(cs_main);
 // BIBLEPAY
 std::map<std::pair<std::string, std::string>, std::pair<std::string, int64_t>> mvApplicationCache;
 std::map<std::string, POSEScore> mvPOSEScore;
+std::map<std::string, Researcher> mvResearchers;
+
 std::string msGithubVersion;
 std::string msLanguage;
 std::string msMasterNodeLegacyPrivKey;
@@ -913,6 +915,15 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
 		// BiblePay
 		if (chainActive.Tip() != NULL)
 		{
+
+			// BiblePay - If this is a PODC association, user must prove ownership of the CPID, otherwise reject the transaction
+			if (!VerifyMemoryPoolCPID(tx))
+			{
+				LogPrintf("AcceptToMemoryPool::PODC association rejected %s \n", 
+						tx.GetHash().GetHex());
+				return false;
+			}
+
 			std::string sRecipient = PubKeyToAddress(tx.vout[0].scriptPubKey);
 			CAmount nTitheAmount = GetTitheTotal(tx);
 			CAmount nNonTitheAmount = GetNonTitheTotal(tx);
@@ -5017,7 +5028,7 @@ void SetOverviewStatus()
 		double dPriorPrice = 0;
 		double dPriorPhase = 0;
 		std::string sQT;
-		if (sporkManager.IsSporkActive(SPORK_30_QUANTITATIVE_TIGHTENING_ENABLED)) 
+		if (sporkManager.IsSporkActive(SPORK_30_QUANTITATIVE_TIGHTENING_ENABLED) && false) 
 		{
 			GetQTPhase(false, -1, chainActive.Tip()->nHeight, dPriorPrice, dPriorPhase);
 			std::string sQTColor = (dPriorPhase == 0) ? "" : "<font color=green>";

@@ -450,7 +450,7 @@ std::string CreateBankrollDenominations(double nQuantity, CAmount denominationAm
 		sError = "Insufficient funds (Unlock Wallet).";
 		return std::string();
 	}
-	std::string sTitheAddress = DefaultRecAddress("CHRISTIAN-PUBLIC-KEYPAIR");
+	std::string sTitheAddress = DefaultRecAddress("Christian-Public-Key");
 	CBitcoinAddress cbAddress(sTitheAddress);
 	CWalletTx wtx;
 	
@@ -591,6 +591,135 @@ CAmount GetRPCBalance()
 {
 	return pwalletMain->GetBalance();
 }
+
+bool CreateExternalPurse(std::string& sError)
+{
+	// This method creates an external purse, used for funding GSC stakes with the wallet locked.
+	if (pwalletMain->IsLocked())
+	{
+		sError = "Wallet must be unlocked.";
+		return false;
+	}
+	std::string sBoinc = DefaultRecAddress("Christian-Public-Key");
+	CBitcoinAddress address;
+	if (!address.SetString(sBoinc))
+	{
+	     sError = "Invalid Biblepay address";
+		 return false;
+	}
+	CKeyID keyID;
+	if (!address.GetKeyID(keyID))
+	{
+		sError = "Address does not refer to a key; Check to ensure wallet is not locked.";
+		return false;
+	}
+	CKey vchSecret;
+    if (!pwalletMain->GetKey(keyID, vchSecret)) 
+	{
+		sError = "Private key for address " + sBoinc + " is not known.  Wallet must be unlocked. ";
+		return false;
+    }
+	std::string ssecret = CBitcoinSecret(vchSecret).ToString();
+	// Encrypt the secret, so hackers cannot easily gain access to the privkey - even if they get physical access to the biblepay.conf file
+	std::string sEncSecret = EncryptAES256(ssecret, sBoinc);
+	// Store the pubkey unencrypted and the privkey encrypted in the biblepay.conf file:		
+	WriteKey("externalprivkey" + sBoinc.substr(0,8), sEncSecret);
+	WriteKey("externalpubkey" + sBoinc.substr(0,8), sBoinc);
+	ForceSetArg("externalprivkey" + sBoinc.substr(0,8), sEncSecret);
+	ForceSetArg("externalpubkey" + sBoinc.substr(0,8), sBoinc);
+	std::string sPubFile1 = GetEPArg(true);
+	LogPrintf("Rereading pubkey %s \n", sPubFile1);
+	return true;	
+}
+
+
+bool GetPublicKeyFromExternalPurse(CPubKey& c)
+{
+	std::string sPrivFile = GetEPArg(false);
+	std::string sPubFile = GetEPArg(true);
+	if (sPubFile.empty() || sPrivFile.empty())
+	{
+		LogPrintf("\nGetPublicKeyFromExternalPurse::Empty %s %s", sPrivFile, sPubFile);
+		return false;
+	}
+	CBitcoinSecret vchSecret;
+	bool fGood = vchSecret.SetString(sPrivFile);
+	if (!fGood)
+	{
+		LogPrintf("Bad private key (boinc) %f", 702);
+		return false;
+	}
+	CKey keyOut = vchSecret.GetKey();
+	if (!keyOut.IsValid()) 
+	{
+		LogPrintf("Key is invalid %f", 703);
+		return false;
+	}
+	c = keyOut.GetPubKey();
+	return true;
+}
+
+bool FundWithExternalPurse(std::string& sError, const CTxDestination &address, CAmount nValue, bool fSubtractFeeFromAmount, CWalletTx& wtxNew, 
+	bool fUseInstantSend, CAmount nExactAmount, std::string sOptionalData, double dMinCoinAge, CPubKey vchPursePubKey)
+{
+
+	// ** Note **:  We only allow external purse funded transactions to fund our own destination purse address through GSCs and through coin-age only. 
+	// We do not allow purse tx's to fund other addresses or to spend UTXOs for non-coinage based tx's.
+	// This is to make it hard to hack an external purse (it would require hacking the encrypted key, then running a fraudulent version of BBP to send the transaction to another recipient.
+	// It would also require the hacker to understand how to modify our wallet class to break the safeguards to select the external UTXO's (which is not allowed currently - because our wallet won't sign them for a non-coin-age tx).
+
+    CAmount curBalance = pwalletMain->GetBalance();
+
+    // Check amount
+    if (nValue <= 0)
+	{
+        sError = "Invalid amount";
+		return false;
+	}
+	
+	if (nValue > curBalance)
+	{
+		sError = "Insufficient funds";
+		return false;
+	}
+    // Parse Biblepay address
+    CScript scriptPubKey = GetScriptForDestination(address);
+
+    CReserveKey reservekey(pwalletMain);
+
+    CAmount nFeeRequired;
+    std::string strError;
+    std::vector<CRecipient> vecSend;
+    int nChangePosRet = -1;
+	bool fForce = false;
+    CRecipient recipient = {scriptPubKey, nValue, fForce, fSubtractFeeFromAmount};
+	vecSend.push_back(recipient);
+	
+    int nMinConfirms = 0;
+
+	// We must pass minCoinAge == .01+, and nExactSpend == purses vout to use this feature:
+	
+    if (!pwalletMain->CreateTransaction(vecSend, wtxNew, reservekey, nFeeRequired, nChangePosRet, strError, NULL, true, ONLY_NONDENOMINATED, fUseInstantSend, 0, 
+		sOptionalData, dMinCoinAge, 0, nExactAmount, vchPursePubKey)) 
+	{
+        if (!fSubtractFeeFromAmount && nValue + nFeeRequired > pwalletMain->GetBalance())
+		{
+            sError = strprintf("Error: This transaction requires a transaction fee of at least %s because of its amount, complexity, or use of recently received funds!", FormatMoney(nFeeRequired));
+			return false;
+		}
+		sError = "Unable to Create Transaction: " + strError;
+		return false;
+    }
+    CValidationState state;
+        
+    if (!pwalletMain->CommitTransaction(wtxNew, reservekey, g_connman.get(), state,  fUseInstantSend ? NetMsgType::TXLOCKREQUEST : NetMsgType::TX))
+	{
+        sError = "Error: The transaction was rejected! This might happen if some of the coins in your wallet were already spent, such as if you used a copy of wallet.dat and coins were spent in the copy but not marked as spent here.";
+		return false;
+	}
+	return true;
+}
+
 
 bool RPCSendMoney(std::string& sError, const CTxDestination &address, CAmount nValue, bool fSubtractFeeFromAmount, CWalletTx& wtxNew, bool fUseInstantSend, std::string sOptionalData)
 {
@@ -958,7 +1087,7 @@ int64_t GetFileSize(std::string sPath)
 
 bool CheckNonce(bool f9000, unsigned int nNonce, int nPrevHeight, int64_t nPrevBlockTime, int64_t nBlockTime, const Consensus::Params& params)
 {
-	if (!f9000) return true;
+	if (!f9000 || nPrevHeight > params.EVOLUTION_CUTOVER_HEIGHT) return true;
 	int64_t MAX_AGE = 30 * 60;
 	int NONCE_FACTOR = 256;
 	int MAX_NONCE = 512;
@@ -1599,6 +1728,25 @@ TxMessage GetTxMessage(std::string sMessage, int64_t nTime, int iPosition, std::
 		// These now have a security hash on each record and are checked individually using CheckStakeSignature
 		t.fPassedSecurityCheck = true;
 	}
+	else if (Contains(t.sMessageType, "CPK-WCG"))
+	{
+		// Security is checked in the memory pool
+		// New CPID associations replace old associations (LIFO)
+		t.fPassedSecurityCheck = true;
+		// Format = sCPK+CPK_Nickname+nTime+sHexSecurityCode+sSignature+sEmail+sVendorType+WCGUserName+WcgVerificationCode+iWCGUserID+CPID;
+		std::vector<std::string> vEle = Split(t.sMessageValue.c_str(), "|");
+		if (vEle.size() >= 9)
+		{
+			std::string sReverseLookup = vEle[0];
+			std::string sCPID = vEle[8];
+			std::string sVerCode = vEle[6];
+			std::string sUN = vEle[5];
+			int nWCGID = (int)cdbl(vEle[7], 0);
+			// This vector is used as a reverse lookup to allow CPIDs to be re-associated in the future (by the proven owner, only)
+			WriteCache("cpid-reverse-lookup", sCPID, sReverseLookup, nTime);
+			LogPrintf("\nReverse CPID lookup for %s is %s", sCPID, sReverseLookup);
+		}
+	}
 	else if (t.sMessageType == "EXPENSE" || t.sMessageType == "REVENUE" || t.sMessageType == "ORPHAN")
 	{
 		t.sSporkSig = t.sBOSig;
@@ -1841,6 +1989,7 @@ bool TermPeekFound(std::string sData, int iBOEType)
 	{
 		if (sData.find("</user>") != std::string::npos) bFound = true;
 		if (sData.find("</error>") != std::string::npos) bFound = true;
+		if (sData.find("</Error>") != std::string::npos) bFound = true;
 		if (sData.find("</error_msg>") != std::string::npos) bFound = true;
 	}
 	else if (iBOEType == 2)
@@ -1873,7 +2022,7 @@ std::string PrepareHTTPPost(bool bPost, std::string sPage, std::string sHostHead
     s << "\r\n" << sMsg;
     return s.str();
 }
-
+	
 static double HTTP_PROTO_VERSION = 2.0;
 std::string BiblepayHTTPSPost(bool bPost, int iThreadID, std::string sActionName, std::string sDistinctUser, std::string sPayload, std::string sBaseURL, std::string sPage, int iPort, 
 	std::string sSolution, int iTimeoutSecs, int iMaxSize, int iBOE)
@@ -2138,7 +2287,8 @@ bool WriteKey(std::string sKey, std::string sValue)
 		fclose(outFileNew);
 		LogPrintf("** Created brand new biblepay.conf file **\n");
 	}
-    boost::to_lower(sKey);
+
+	// Allow camel-case keys (required by our external purse feature)
     std::string sLine;
     std::ifstream streamConfigFile;
     streamConfigFile.open(pathConfigFile.string().c_str());
@@ -2153,7 +2303,7 @@ bool WriteKey(std::string sKey, std::string sValue)
             {
                 std::string sSourceKey = vEntry[0];
                 std::string sSourceValue = vEntry[1];
-                boost::to_lower(sSourceKey);
+                // Don't force lowercase anymore in the biblepay.conf file for mechanically added values
                 if (sSourceKey == sKey) 
                 {
                     sSourceValue = sValue;
@@ -2201,7 +2351,8 @@ std::string GetCPKData(std::string sProjectId, std::string sPK)
 	return ReadCache(sProjectId, sPK);
 }
 
-bool AdvertiseChristianPublicKeypair(std::string sProjectId, std::string sNickName, std::string sEmail, std::string sVendorType, bool fUnJoin, bool fForce, CAmount nFee, std::string sOptData, std::string &sError)
+bool AdvertiseChristianPublicKeypair(std::string sProjectId, std::string sNickName, std::string sEmail, std::string sVendorType, bool fUnJoin, 
+	bool fForce, CAmount nFee, std::string sOptData, std::string &sError)
 {	
 	std::string sCPK = DefaultRecAddress("Christian-Public-Key");
 
@@ -2229,8 +2380,8 @@ bool AdvertiseChristianPublicKeypair(std::string sProjectId, std::string sNickNa
 			}
 		}
 	}
-
-	std::string sRec = GetCPKData(sProjectId, sCPK);
+	std::string sPK = sCPK;
+	std::string sRec = GetCPKData(sProjectId, sPK);
 	if (fUnJoin)
 	{
 		if (sRec.empty()) {
@@ -2272,8 +2423,8 @@ bool AdvertiseChristianPublicKeypair(std::string sProjectId, std::string sNickNa
 	sNickName = SanitizeString(sNickName);
 	LIMITED_STRING(sNickName, 20);
 	std::string sMsg = GetRandHash().GetHex();
-	std::string sPK = sCPK;
-	if (fUnJoin) sPK = "";	
+	if (fUnJoin)
+		sPK = std::string();
 	std::string sData = sPK + "|" + sNickName + "|" + RoundToString(GetAdjustedTime(),0) + "|" + sMsg;
 	std::string sSignature;
 	bool bSigned = false;
@@ -2285,13 +2436,12 @@ bool AdvertiseChristianPublicKeypair(std::string sProjectId, std::string sNickNa
 	}
 	else
 	{
-		sError = "Unable to sign CPK " + sCPK + " (" + sError + ")";
+		sError = "Unable to sign CPK " + sCPK + " (" + sError + ").  Error 837.";
 		return false;
 	}
-	
-	std::string sSigGSC;
-	bSigned = SignStake(sCPK, sMsg, sError, sSigGSC);
-	std::string sExtraGscPayload = "<gscsig>" + sSigGSC + "</gscsig><abncpk>" + sCPK + "</abncpk><abnmsg>" + sMsg + "</abnmsg>";
+
+	std::string sExtraGscPayload = "<gscsig>" + sSignature + "</gscsig><abncpk>" + sCPK + "</abncpk><abnmsg>" + sMsg + "</abnmsg>";
+	sError = std::string();
 	std::string sResult = SendBlockchainMessage(sProjectId, sCPK, sData, nFee/COIN, false, sExtraGscPayload, sError);
 	if (!sError.empty())
 	{
@@ -2315,7 +2465,8 @@ void ProcessBLSCommand(CTransactionRef tx)
 {
 	std::string sXML = GetTransactionMessage(tx);
 	std::string sEnc = ExtractXML(sXML, "<blscommand>", "</blscommand>");
-	LogPrintf("\nBLS Command %s %s ", sXML, sEnc);
+	if (fDebugSpam)
+		LogPrintf("\nBLS Command %s %s ", sXML, sEnc);
 
 	if (msMasterNodeLegacyPrivKey.empty())
 		return;
@@ -2916,6 +3067,16 @@ std::string DSQL_Ansi92Query(std::string sSQL)
 	return sResponse;
 }
 
+BBPResult DSQL_ReadOnlyQuery(std::string sXMLSource)
+{
+	std::string sDomain = "https://web.biblepay.org";
+	int iTimeout = 30000;
+	int iSize = 1000000;
+	BBPResult b;
+	b.Response = BiblepayHTTPSPost(true, 0, "", "", "", sDomain, sXMLSource, 443, "", iTimeout, iSize, 4);
+	return b;
+}
+
 std::string Path_Combine(std::string sPath, std::string sFileName)
 {
 	if (sFileName.empty())
@@ -3127,3 +3288,140 @@ std::string BIPFS_Payment(CAmount nAmount, std::string sTXID1, std::string sXML1
 	return b.Response;
 }
 
+int LoadResearchers()
+{
+	// On wallet boot, we load the Boinc Researchers (Cancer Miners, Aids researchers, and/or WCG researchers) in from DSQL, then again every 24 hours we refresh the collection.
+	
+	static int MIN_RESEARCH_SZ = 3;
+	BBPResult b = DSQL_ReadOnlyQuery("wwwroot/certs/wcgrac.xml");
+	if (fDebugSpam)
+		LogPrintf("Researchers %s ", b.Response);
+
+	std::vector<std::string> vResearchers = Split(b.Response, "</user>");
+	mvResearchers.clear();
+	std::string sTarget = GetSANDirectory2() + "wcg.rac";
+
+	if (vResearchers.size() < MIN_RESEARCH_SZ)
+	{
+		int64_t nSz = GetFileSize(sTarget);
+		int64_t nAge = GetDCCFileAge();
+		// Fall back to POBH & Cameroon-One if WCG is down:
+		if (nSz > 100 && nAge < (60 * 60 * 24))
+		{
+			boost::filesystem::path pathIn(sTarget);
+			std::ifstream streamIn;
+			streamIn.open(pathIn.string().c_str());
+			if (!streamIn) 
+				return -1;
+			std::string line;
+			std::string sData;
+			while(std::getline(streamIn, line))
+			{
+				sData += line + "\r\n";
+			}
+			streamIn.close();
+			vResearchers = Split(sData, "</user>");
+		}
+	}
+	for (int i = 0; i < vResearchers.size(); i++)
+	{
+		Researcher r;
+		r.nickname = ExtractXML(vResearchers[i], "<name>", "</name>");
+		r.teamid = cdbl(ExtractXML(vResearchers[i],"<teamid>", "</teamid>"),0);
+		r.cpid = ExtractXML(vResearchers[i], "<cpid>", "</cpid>");
+		r.country = ExtractXML(vResearchers[i], "<country>", "</country>");
+		r.creationtime = cdbl(ExtractXML(vResearchers[i], "<create_time>", "</create_time>"), 0);
+		r.totalcredit = cdbl(ExtractXML(vResearchers[i], "<total_credit>", "</total_credit>"), 2);
+		r.wcgpoints = r.totalcredit * 7;
+		r.rac = cdbl(ExtractXML(vResearchers[i], "<expavg_credit>", "</expavg_credit>"), 10);
+		r.id = cdbl(ExtractXML(vResearchers[i], "<id>", "</id>"), 0);
+		if (r.rac > 0 && r.cpid.length() == 32)
+		{
+			r.found = true;
+			mvResearchers[r.cpid] = r;
+			if (fDebugSpam)
+				LogPrintf(";cpid %s\n", r.cpid);
+		}
+	}
+	if (fDebug)
+		LogPrintf("LoadResearchers::Processed %f CPIDs.\n", mvResearchers.size());
+	FILE *outFile = fopen(sTarget.c_str(), "w");
+	fputs(b.Response.c_str(), outFile);
+	fclose(outFile);
+	return 1;
+}
+
+std::string TeamToName(int iTeamID)
+{
+	// 30513, 35006
+	if (iTeamID == 35006)
+	{
+		return "Biblepay";
+	}
+	else if (iTeamID == 30513)
+	{
+		return "Gridcoin";
+	}
+	else
+	{
+		return "Unknown";
+	}
+}
+
+
+std::string GetResearcherCPID()
+{
+	std::string sCPK = DefaultRecAddress("Christian-Public-Key");
+	std::string sResData = ReadCache("CPK-WCG", sCPK);
+	// Format = 0 sCPK + 1 CPK_Nickname  +  2 nTime +   3 HexSecurityCode + 4 sSignature + 5 wcg username  + 6 wcg_sec_code + 7 wcg userid + 8 = CPID;
+	std::vector<std::string> vEle = Split(sResData.c_str(), "|");
+	LogPrintf("\nGetResearcherCPID %s for %s\n", sResData, sCPK);
+	if (vEle.size() < 9)
+		return "";
+	return vEle[8];
+}
+
+
+bool VerifyMemoryPoolCPID(CTransaction tx)
+{
+    std::string sXML = tx.GetTxMessage();
+	std::string sMessageType      = ExtractXML(sXML,"<MT>","</MT>");
+	std::string sMessageKey       = ExtractXML(sXML,"<MK>","</MK>");
+	std::string sMessageValue     = ExtractXML(sXML,"<MV>","</MV>");
+	boost::to_upper(sMessageType);
+	boost::to_upper(sMessageKey);
+	if (!Contains(sMessageType,"CPK-WCG"))
+		return true;
+	// Format = sCPK+CPK_Nickname+nTime+sHexSecurityCode+sSignature+sEmail+sVendorType+WCGUserName+8=WcgVerificationCode+9=iWCGUserID+10=CPID;
+	std::vector<std::string> vEle = Split(sMessageValue.c_str(), "|");
+	if (vEle.size() < 9)
+		return true;
+	std::string sCPID = vEle[8];
+	std::string sVerCode = vEle[6];
+	std::string sUN = vEle[5];
+	int nPurportedID = (int)cdbl(vEle[7], 0);
+	double nPoints = 0;
+	int nID = GetWCGMemberID(sUN, sVerCode, nPoints);
+	if (nID != nPurportedID)
+	{
+		LogPrintf("\n\n*** VerifyMemoryPoolCPID::FAILED --Association %s, UN %s, VC %s, CPID %s, Purported ID %f, Actual ID %f\n",
+			sMessageValue, sUN, sVerCode, sCPID, nPurportedID, nID);
+		return false;
+	}
+	else 
+	{
+		LogPrintf("\nVerifyMemoryPoolCPID::Success! %s\n", sCPID);
+	}
+	return true;		
+}
+
+std::string GetEPArg(bool fPublic)
+{
+	std::string sEPA = DefaultRecAddress("Christian-Public-Key");
+	if (sEPA.length() < 8)
+		return std::string();
+	std::string sPubFile = GetArg("-externalpubkey" + sEPA.substr(0,8), "");
+	std::string sPrivFile = GetArg("-externalprivkey" + sEPA.substr(0,8), "");
+	std::string sUsable = DecryptAES256(sPrivFile, sEPA);
+	return fPublic ? sPubFile : sUsable;
+}

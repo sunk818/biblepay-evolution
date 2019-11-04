@@ -57,6 +57,7 @@ void ScriptPubKeyToJSON(const CScript& scriptPubKey, UniValue& out, bool fInclud
 UniValue protx_register(const JSONRPCRequest& request);
 UniValue protx(const JSONRPCRequest& request);
 UniValue _bls(const JSONRPCRequest& request);
+UniValue hexblocktocoinbase(const JSONRPCRequest& request);
 
 double GetDifficulty(const CBlockIndex* blockindex)
 {
@@ -1710,6 +1711,38 @@ std::string ScanSanctuaryConfigFile(std::string sName)
     return std::string();
 }
 
+std::string ScanDeterministicConfigFile(std::string sName)
+{
+    int linenumber = 1;
+    boost::filesystem::path pathDeterministicFile = GetDeterministicConfigFile();
+    boost::filesystem::ifstream streamConfig(pathDeterministicFile);
+    if (!streamConfig.good()) 
+		return std::string();
+	//Format: Sanctuary_Name IP:port(40000=prod,40001=testnet) BLS_Public_Key BLS_Private_Key Collateral_output_txid Collateral_output_index Pro-Registration-TxId Pro-Reg-Collateral-Address Pro-Reg-Se$
+
+	for(std::string line; std::getline(streamConfig, line); linenumber++)
+    {
+        if(line.empty()) continue;
+        std::istringstream iss(line);
+        std::string sanctuary_name, ip, blsPubKey, BlsPrivKey, colOutputTxId, colOutputIndex, ProRegTxId, ProRegCollAddress, ProRegCollAddFundSentTxId;
+        if (iss >> sanctuary_name) 
+		{
+            if(sanctuary_name.at(0) == '#') continue;
+            iss.str(line);
+            iss.clear();
+        }
+
+		if (sanctuary_name == sName)
+		{
+			streamConfig.close();
+			return line;
+		}
+    }
+    streamConfig.close();
+    return std::string();
+}
+
+
 boost::filesystem::path GetGenericFilePath(std::string sPath)
 {
     boost::filesystem::path pathConfigFile(sPath);
@@ -1737,6 +1770,15 @@ void AppendSanctuaryFile(std::string sFile, std::string sData)
     }
 	fwrite(sData.c_str(), std::strlen(sData.c_str()), 1, configFile);
     fclose(configFile);
+}
+
+void BoincHelpfulHint(UniValue& e)
+{
+	e.push_back(Pair("Step 1", "Log into your WCG account at 'worldcommunitygrid.org' with your WCG E-mail address and WCG password."));
+	e.push_back(Pair("Step 2", "Click Settings | My Profile.  Record your 'Username' and 'Verification Code' and your 'CPID' (Cross-Project-ID)."));
+	e.push_back(Pair("Step 3", "From our RPC console, type, exec join wcg your_username your_verification_code"));
+	e.push_back(Pair("Step 4", "Wait for 5 blocks to pass.  Then type 'exec rac' again, and see if you are linked!  "));
+	e.push_back(Pair("Step 5", "Once you are linked you will receive daily rewards.  Please read about our minimum stake requirements per RAC here: wiki.biblepay.org/PODC"));
 }
 
 UniValue exec(const JSONRPCRequest& request)
@@ -2011,48 +2053,29 @@ UniValue exec(const JSONRPCRequest& request)
 		results.push_back(Pair("vote_result", bRes));
 		results.push_back(Pair("vote_error", sError));
 	}
-	else if (sItem == "hexblocktocoinbase")
+	else if (sItem == "blocktohex")
 	{
-		// This call is used by pools (pool.biblepay.org and purepool) to verify a serialized solution
 		std::string sBlockHex = request.params[1].get_str();
 		CBlock block;
         if (!DecodeHexBlk(block, sBlockHex))
                 throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block decode failed");
-		if (block.vtx.size() < 1)
-		    throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Deserialization Error");
-    	results.push_back(Pair("txid", block.vtx[0]->GetHash().GetHex()));
-		results.push_back(Pair("recipient", PubKeyToAddress(block.vtx[0]->vout[0].scriptPubKey)));
-		CBlockIndex* pindexPrev = chainActive.Tip();
-		bool f7000;
-		bool f8000;
-		bool f9000;
-		bool fTitheBlocksActive;
-		GetMiningParams(pindexPrev->nHeight, f7000, f8000, f9000, fTitheBlocksActive);
-		const Consensus::Params& consensusParams = Params().GetConsensus();
+		CDataStream ssBlock(SER_NETWORK, PROTOCOL_VERSION);
+		ssBlock << block;
+		std::string sBlockHex1 = HexStr(ssBlock.begin(), ssBlock.end());
+		CTransaction txCoinbase;
+		std::string sTxCoinbaseHex1 = EncodeHexTx(*block.vtx[0]);
+		results.push_back(Pair("blockhex", sBlockHex1));
+		results.push_back(Pair("txhex", sTxCoinbaseHex1));
 
-		uint256 hash = BibleHashClassic(block.GetHash(), block.GetBlockTime(), pindexPrev->nTime, true, pindexPrev->nHeight, NULL, false, f7000, f8000, f9000, fTitheBlocksActive, block.nNonce, consensusParams);
-		results.push_back(Pair("biblehash", hash.GetHex()));
-		results.push_back(Pair("subsidy", block.vtx[0]->vout[0].nValue/COIN));
-		results.push_back(Pair("blockversion", GetBlockVersion(block.vtx[0]->vout[0].sTxOutMessage)));
-		std::string sMsg;
-		for (unsigned int i = 0; i < block.vtx[0]->vout.size(); i++)
-		{
-			sMsg += block.vtx[0]->vout[i].sTxOutMessage;
-		}
-		// Include abn weight in the reply
-		double nABNWeight = GetABNWeight(block, false);
-		double nMinRequiredABNWeight = GetSporkDouble("requiredabnweight", 0);
-		double nABNHeight = GetSporkDouble("abnheight", 0);
-		bool fABNPassed = true;
-		if (nABNHeight > consensusParams.ABNHeight && pindexPrev->nHeight > nABNHeight && nMinRequiredABNWeight > 0 && !LateBlock(block, pindexPrev, 60) && !LateBlockIndex(pindexPrev, 60))
-		{
-			if (nABNWeight < nMinRequiredABNWeight) 
-				fABNPassed = false;
-		} 
-		results.push_back(Pair("requiredabnweight", nMinRequiredABNWeight));
-		results.push_back(Pair("block_abn_weight", nABNWeight));
-		results.push_back(Pair("abn_passed", fABNPassed));
-		results.push_back(Pair("blockmessage", sMsg));
+	}
+	else if (sItem == "hexblocktocoinbase")
+	{
+		if (request.params.size() != 2)
+			throw std::runtime_error("You must specify the block serialization hex.");
+		JSONRPCRequest myCommand;
+		myCommand.params.setArray();
+		myCommand.params.push_back(request.params[1].get_str());
+		results = hexblocktocoinbase(myCommand);
 	}
 	else if (sItem == "search")
 	{
@@ -2371,19 +2394,87 @@ UniValue exec(const JSONRPCRequest& request)
 		results.push_back(Pair("Enc", sEnc));
 		results.push_back(Pair("Dec", sDec));
 	}
+	else if (sItem == "associate")
+	{
+		if (request.params.size() != 2 && request.params.size() != 3 && request.params.size() != 4)
+			throw std::runtime_error("You must specify exec associate wcg_username wcg_verificationcode.  (WCG | LogIn | My Profile | Copy down your 'Username' AND 'VERIFICATION CODE').");
+
+		std::string sUserName;
+		std::string sVerificationCode;
+		if (request.params.size() > 1)
+			sUserName = request.params[1].get_str();
+		if (request.params.size() > 2)
+			sVerificationCode = request.params[2].get_str();
+		bool fForce = false;
+		if (request.params.size() > 3)
+			fForce = request.params[3].get_str() == "true" ? true : false;
+	    // PODC 2.0 : Verify the user inside WCG before succeeding
+		// Step 1
+		double nPoints = 0;
+		int nID = GetWCGMemberID(sUserName, sVerificationCode, nPoints);
+		if (nID == 0)
+			throw std::runtime_error("Unable to find " + sUserName + ".  Please type exec rac to see helpful hints to proceed. ");
+
+		results.push_back(Pair("wcg_member_id", nID));
+		results.push_back(Pair("wcg_points", nPoints));
+		Researcher r = GetResearcherByID(nID);
+		if (!r.found || r.cpid.length() != 32)
+		{
+			std::string sErr = "Sorry, we found you as a researcher in WCG, but we were unable to locate you on the team.  "
+				 "Please join team BiblePay or team Gridcoin to proceed.  Please type 'exec rac' to see more helpful hints.  "
+                 "NOTE:  You may check back again once every 12 hours to see if you are on the team. ";
+			throw std::runtime_error(sErr.c_str());
+		}
+		results.push_back(Pair("cpid", r.cpid));
+		results.push_back(Pair("rac", r.rac));
+		results.push_back(Pair("researcher_nickname", r.nickname));
+		std::string sError;
+		// Step 2 : Advertise the keypair association with the CPID (and join the researcher to the campaign).
+		if (!CheckCampaign("wcg"))
+			throw std::runtime_error("Campaign wcg does not exist.");
+		bool fAdv = AdvertiseChristianPublicKeypair("cpk-wcg", "", sUserName + "|" + sVerificationCode + "|" + RoundToString(nID, 0) + "|" + r.cpid, "", false, fForce, 0, "", sError);
+		if (!fAdv)
+		{
+			results.push_back(Pair("Error", sError));
+		}
+		else
+		{
+			// Step 3:  Create external purse
+
+			bool fCreated = CreateExternalPurse(sError);
+			if (!sError.empty())
+				results.push_back(Pair("External Purse Creation Error", sError));
+			else
+			{
+				std::string sEFA = DefaultRecAddress("Christian-Public-Key");
+				results.push_back(Pair("Purse Status", "Successful"));
+				results.push_back(Pair("External Purse Address", sEFA));
+				results.push_back(Pair("Remember", "Now you must fund your external address with enough capital to make daily PODC/GSC stakes."));
+			}
+
+			// (Dev notes: In step 2, we already joined the cpk to wcg - equivalent to 'exec join wcg' so we do not need to do that here).
+			results.push_back(Pair("Results", fAdv));
+			results.push_back(Pair("Welcome Aboard!", 
+				"You have successfully joined the BiblePay Proof Of Distributed Comuting (PODC) grid, and now you can help cure cancer, AIDS, and make the world a better place!  God Bless You!"));
+		}
+	}
 	else if (sItem == "join")
 	{
-		if (request.params.size() != 2 && request.params.size() != 3)
-			throw std::runtime_error("You must specify the project_name.  Optionally specify your nickname or sanctuary IP address.");
+		if (request.params.size() != 2 && request.params.size() != 3 && request.params.size() != 4)
+			throw std::runtime_error("You must specify the project_name.  Optionally specify your nickname or sanctuary IP address.  Optionally specify force=true/false.");
 		std::string sProject = request.params[1].get_str();
 		std::string sOptData;
+		bool fForce = false;
 		if (request.params.size() > 2)
 			sOptData = request.params[2].get_str();
+		if (request.params.size() > 3)
+			fForce = request.params[3].get_str() == "true" ? true : false;
 		boost::to_lower(sProject);
 		std::string sError;
 		if (!CheckCampaign(sProject))
 			throw std::runtime_error("Campaign does not exist.");
-		bool fAdv = AdvertiseChristianPublicKeypair("cpk-" + sProject, "", sOptData, "", false, false, 0, "", sError);
+		bool fAdv = AdvertiseChristianPublicKeypair("cpk-" + sProject, "", sOptData, "", false, fForce, 0, "", sError);
+
 		results.push_back(Pair("Results", fAdv));
 		if (!fAdv)
 			results.push_back(Pair("Error", sError));
@@ -2557,28 +2648,150 @@ UniValue exec(const JSONRPCRequest& request)
 	}
 	else if (sItem == "price")
 	{
-		double dPriorPrice = 0;
-		double dPriorPhase = 0;
-		double dCurPhase = GetQTPhase(false, -1, chainActive.Tip()->nHeight, dPriorPrice, dPriorPhase);
-		results.push_back(Pair("consensus_price", dPriorPrice));
-		results.push_back(Pair("qt_phase", dCurPhase));
-		results.push_back(Pair("qt_prior_phase", dPriorPhase));
-		double out_BTC = 0;
-		double dPrice = GetPBase(out_BTC);
-		double dFuturePhase = GetQTPhase(true, dPrice, chainActive.Tip()->nHeight, dPriorPrice, dPriorPhase);
-		results.push_back(Pair("qt_future_phase", dFuturePhase));
 		bool fEnabled = sporkManager.IsSporkActive(SPORK_30_QUANTITATIVE_TIGHTENING_ENABLED);
-		results.push_back(Pair("qt_enabled", fEnabled));
-		results.push_back(Pair("cur_price", RoundToString(dPrice, 12)));
-		double dBBP = GetCryptoPrice("bbp");
-		double dBTC = GetCryptoPrice("btc");
-		results.push_back(Pair("BBP/BTC", RoundToString(dBBP, 12)));
-		results.push_back(Pair("BTC/USD", dBTC));
+		double nMaxPerc = GetSporkDouble("qtmaxpercentage", 0);
+	
+		if (fEnabled && nMaxPerc > 0)
+		{
+			double dPriorPrice = 0;
+			double dPriorPhase = 0;
+			double dCurPhase = GetQTPhase(false, -1, chainActive.Tip()->nHeight, dPriorPrice, dPriorPhase);
+			results.push_back(Pair("consensus_price", dPriorPrice));
+			results.push_back(Pair("qt_phase", dCurPhase));
+			results.push_back(Pair("qt_prior_phase", dPriorPhase));
+			double out_BTC = 0;
+			double dPrice = GetPBase(out_BTC);
+			double dFuturePhase = GetQTPhase(true, dPrice, chainActive.Tip()->nHeight, dPriorPrice, dPriorPhase);
+			results.push_back(Pair("qt_future_phase", dFuturePhase));
+			results.push_back(Pair("qt_enabled", fEnabled));
+			results.push_back(Pair("cur_price", RoundToString(dPrice, 12)));
+			double dBBP = GetCryptoPrice("bbp");
+			double dBTC = GetCryptoPrice("btc");
+			results.push_back(Pair("BBP/BTC", RoundToString(dBBP, 12)));
+			results.push_back(Pair("BTC/USD", dBTC));
+		}
+		else
+		{
+			double dBBP = GetCryptoPrice("bbp");
+			double dBTC = GetCryptoPrice("btc");
+			results.push_back(Pair("QT", "Disabled"));
+			results.push_back(Pair("BBP/BTC", RoundToString(dBBP, 12)));
+			results.push_back(Pair("BTC/USD", dBTC));
+			double nPrice = GetBBPPrice();
+			results.push_back(Pair("BBP/USD", nPrice));
+		}
+	}
+	else if (sItem == "paycameroon")
+	{
+		if (request.params.size() != 4)
+			throw std::runtime_error("You must specify childid amount_in_USD send_mode.  IE: exec paycameroon childID 40 [test/authorize].");
+		std::string sError;
+	   	std::string sCPK = DefaultRecAddress("Christian-Public-Key");
+		std::string sChildID = request.params[1].get_str();
+		double nAmountUSD = cdbl(request.params[2].get_str(), 2);
+		std::string sSendMode = request.params[3].get_str();
+		double nPrice = GetBBPPrice();
+		
+		if (nPrice < .00001)
+		{
+			sError = "BBP Price too low to use feature.  Price must be above .00001USD/BBP ";
+			nPrice = .00001;
+		}
+
+		if (nAmountUSD < 1)
+		{
+			sError += "You must enter a USD value greater than $1.00 to use this feature. ";
+			nAmountUSD = .01;
+		}
+
+		bool fGood = VerifyChild(sChildID);
+		if (!fGood || sChildID.empty())
+			sError += "Invalid Child ID. (Not sponsored). ";
+
+		if (sSendMode != "authorize")
+		{
+			sError += "Running in dry run mode. ";
+		}
+
+		double nAmount = cdbl(RoundToString(nAmountUSD / nPrice, 2), 2);
+
+		results.push_back(Pair("BBP/USD_Price", nPrice));
+
+		std::string sXML = "<cpk>" + sCPK + "</cpk><childid> " + sChildID + "</childid><amount_usd>" + RoundToString(nAmountUSD, 2) 
+			+ "</amount_usd><amount>" + RoundToString(nAmount, 2) + "</amount>";
+		std::string sDest = "BHRiFZYUpHj2r3gxw7pHyvByTUk1dGb8vz";
+		CBitcoinAddress baDest(sDest);
+
+		bool fSubtractFee = false;
+		bool fInstantSend = false;
+		CWalletTx wtx;
+		bool fSent = false;
+		if (sError.empty() && sSendMode == "authorize")
+		{
+			fSent = RPCSendMoney(sError, baDest.Get(), nAmount * COIN, fSubtractFee, wtx, fInstantSend, sXML);
+		}
+
+		if (!fSent)
+		{
+			results.push_back(Pair("Error", sError));
+			results.push_back(Pair("BBPAmount", nAmount));
+			results.push_back(Pair("USDAmount", nAmountUSD));
+		}
+		else
+		{
+			results.push_back(Pair("txid", wtx.GetHash().GetHex()));
+			results.push_back(Pair("childid", sChildID));
+			results.push_back(Pair("BBPAmount", nAmount));
+			results.push_back(Pair("USDAmount", nAmountUSD));
+		}
 	}
 	else if (sItem == "sentgsc")
 	{
 		UniValue s = SentGSCCReport(0);
 		return s;
+	}
+	else if (sItem == "revivesanc")
+	{
+		// Sanctuary Revival - BiblePay
+		// The purpose of this command is to make it easy to Revive a POSE-banned deterministic sanctuary.  (In contrast to knowing how to create and send the protx update_service command).
+		std::string sExtraHelp = "NOTE:  If you do not have a deterministic.conf file, you can still revive your sanctuary this way: protx update_service proreg_txID sanctuaryIP:Port sanctuary_blsPrivateKey\n\n NOTE: You can right click on the sanctuary in the Sanctuaries Tab in QT and obtain the proreg_txID, and, you can write the IP down from the list.  You still need to find your sanctuaryBLSPrivKey.\n";
+
+		if (request.params.size() != 2)
+			throw std::runtime_error("You must specify exec revivesanc sanctuary_name (where the sanctuary_name matches the name in the deterministic.conf file).\n\n" + sExtraHelp);
+		std::string sSearch = request.params[1].get_str();
+		std::string sSanc = ScanDeterministicConfigFile(sSearch);
+		if (sSanc.empty())
+			throw std::runtime_error("Unable to find sanctuary " + sSearch + " in deterministic.conf file.");
+		std::vector<std::string> vSanc = Split(sSanc.c_str(), " ");
+		if (vSanc.size() < 9)
+			throw std::runtime_error("Sanctuary entry in deterministic.conf corrupted (does not contain at least 9 parts.) Format should be: Sanctuary_Name IP:port(40000=prod,40001=testnet) BLS_Public_Key BLS_Private_Key Collateral_output_txid Collateral_output_index Pro-Registration-TxId Pro-Reg-Collateral-Address Pro-Reg-funding-sent-txid.");
+
+		std::string sSancName = vSanc[0];
+		std::string sSancIP = vSanc[1];
+		std::string sBLSPrivKey = vSanc[3];
+		std::string sProRegTxId = vSanc[8];
+
+		std::string sSummary = "Creating protx update_service command for Sanctuary " + sSancName + " with IP " + sSancIP + " with origin pro-reg-txid=" + sProRegTxId;
+		sSummary += "(protx update_service " + sProRegTxId + " " + sSancIP + " " + sBLSPrivKey + ").";
+
+		LogPrintf("\nCreating ProTx_Update_service %s for Sanc [%s].\n", sSummary, sSanc);
+
+		std::string sError;
+		results.push_back(Pair("Summary", sSummary));
+
+	    JSONRPCRequest newRequest;
+		newRequest.params.setArray();
+
+		newRequest.params.push_back("update_service");
+		newRequest.params.push_back(sProRegTxId);
+		newRequest.params.push_back(sSancIP);
+		newRequest.params.push_back(sBLSPrivKey);
+		
+		UniValue rProReg = protx(newRequest);
+		results.push_back(rProReg);
+		// If we made it this far and an error was not thrown:
+		results.push_back(Pair("Results", "Sent sanctuary revival pro-tx successfully.  Please wait for the sanctuary list to be updated to ensure the sanctuary is revived.  This usually takes one to fifteen minutes."));
+
 	}
 	else if (sItem == "upgradesanc")
 	{
@@ -2686,6 +2899,76 @@ UniValue exec(const JSONRPCRequest& request)
 		std::string sDSD = sSancName + " " + sSancIP + " " + myBLSPublic + " " + myBLSPrivate + " " + sCollateralTXID + " " + sCollateralTXIDOrdinal + " " + sProRegTxId + " " + sProCollAddr + " " + sSentTxId + "\n";
 		if (iDryRun == 1)
 			AppendSanctuaryFile("deterministic.conf", sDSD);
+	}
+	else if (sItem == "rac")
+	{
+		// Query the WCG RAC from the last known quorum - this lets the users see that their CPID is producing RAC on team biblepay
+		// This command should also confirm the CPID link status
+		// So:  Display WCG Rac in team BBP, Link Status, and external-purse weight need to be shown.
+		// This command can knock out most troubleshooting issues all in one swoop.
+
+		// First verif the user has a CPK...
+		CPK myCPK = GetMyCPK("cpk");
+		if (myCPK.sAddress.empty()) 
+		{
+			results.push_back(Pair("Error", "Sorry, you do not have a CPK.  First please create your CPK by typing 'exec cpk your_nickname'.  This adds your CPK to the chain.  Please wait 3 or more blocks after adding your CPK before you move on to the next step. "));
+			BoincHelpfulHint(results);
+			return results;
+		}
+
+		// Next check the link status (of the exec join wcg->cpid)...
+		std::string sCPID = GetResearcherCPID();
+		UniValue e(UniValue::VOBJ);
+
+		if (sCPID.empty())
+		{
+			results.push_back(Pair("Error", "Not Linked.  First, you must link your researcher CPID in the chain using 'exec associate'."));
+			BoincHelpfulHint(results);
+			return results;
+		}
+
+		results.push_back(Pair("cpid", sCPID));
+		Researcher r = mvResearchers[sCPID];
+		if (!r.found)
+		{
+			results.push_back(Pair("Error", "Your CPID is linked to your CPK, but we are unable to find your research records in WCG; most likely because you are not in team BiblePay yet."));
+			BoincHelpfulHint(results);
+			return results;
+		}
+		else
+		{
+			results.push_back(Pair("CPK", myCPK.sAddress));
+			results.push_back(Pair("wcg_teamid", r.teamid));
+			int nFreq = (int)cdbl(GetArg("-dailygscfrequency", RoundToString(BLOCKS_PER_DAY, 0)), 0);
+			int nHeight = chainActive.Tip()->nHeight - (chainActive.Tip()->nHeight % nFreq) + nFreq;
+			results.push_back(Pair("next_podc_gsc_transmission", nHeight));
+			std::string sTeamName = TeamToName(r.teamid);
+			
+			bool fWhitelisted = sTeamName == "Unknown" ? false : true;
+			if (!fWhitelisted)
+				results.push_back(Pair("Warning!", "** You must join team BiblePay or Gridcoin to be compensated for Research Activity in PODC. **"));
+			results.push_back(Pair("team_name", sTeamName));
+			results.push_back(Pair("researcher_nickname", r.nickname));
+			if (!r.country.empty())
+				results.push_back(Pair("researcher_country", r.country));
+			results.push_back(Pair("total_wcg_boinc_credit", r.totalcredit));
+			results.push_back(Pair("total_wcg_points", r.wcgpoints));
+			// Print out the current coin age requirements
+			double nCAR = GetNecessaryCoinAgePercentageForPODC();
+			CAmount nReqCoins = 0;
+			double nTotalCoinAge = pwalletMain->GetAntiBotNetWalletWeight(0, nReqCoins);
+			results.push_back(Pair("external_purse_total_coin_age", nTotalCoinAge));
+			results.push_back(Pair("coin_age_percent_required", nCAR));
+			double nCoinAgeReq = GetRequiredCoinAgeForPODC(r.rac);
+			if (nTotalCoinAge < nCoinAgeReq)
+			{
+				results.push_back(Pair("NOTE!", "Coins must have a maturity of at least 5 confirms for your coin*age to count.  (See current depth in coin control)."));
+			}
+	
+			results.push_back(Pair("coin_age_required", nCoinAgeReq));
+			results.push_back(Pair("wcg_id", r.id));
+			results.push_back(Pair("rac", r.rac));
+		}
 	}
 	else if (sItem == "navdsql")
 	{
@@ -2950,6 +3233,86 @@ UniValue exec(const JSONRPCRequest& request)
 		std::string sTxCoinbaseHex = EncodeHexTx(*block.vtx[0]);
 		results.push_back(Pair("blockhex", sBlockHex));
 		results.push_back(Pair("txhex", sTxCoinbaseHex));
+	}
+	else if (sItem == "getarg")
+	{
+		// Allows user to display a configuration value (useful if you are not sure if you entered a config value in your file)
+		std::string sArg = request.params[1].get_str();
+		std::string sValue = GetArg("-" + sArg, "");
+		results.push_back(Pair("arg", sValue));
+	}
+	else if (sItem == "createpurse")
+	{
+		std::string sError;
+		// Dont even try unless unlocked
+		// Note:  We automatically do this in 'exec associate'.  This is useful if someone missed it.
+		bool fCreated = CreateExternalPurse(sError);
+		if (!sError.empty())
+			results.push_back(Pair("Error", sError));
+		else
+		{
+			std::string sEFA = DefaultRecAddress("Christian-Public-Key");
+			results.push_back(Pair("Status", "Successful"));
+			results.push_back(Pair("Address", sEFA));
+			std::string sPubFile = GetEPArg(true);
+			results.push_back(Pair("PubFundAddress", sPubFile));
+			results.push_back(Pair("Remember", "Now you must fund your external address with enough capital to make daily PODC/GSC stakes."));
+		}
+
+	}
+	else if (sItem == "boinc1")
+	{
+		// This command is only for dev debugging; will be removed soon.
+		// Probe the external purse for the necessary coins
+		CAmount nMatched = 0;
+		CAmount nTotal = 0;
+		std::string sEFA = DefaultRecAddress("Christian-Public-Key");
+		std::vector<COutput> cCoins = pwalletMain->GetExternalPurseBalance(sEFA, 1*COIN, nMatched, nTotal);
+		results.push_back(Pair("purse size", cCoins.size()));
+		results.push_back(Pair("purse amount matched", (double)nMatched/COIN));
+		results.push_back(Pair("purse total", (double)nTotal/COIN));
+		bool fSubtractFee = false;
+		bool fInstantSend = false;
+		std::string sError;
+	    CWalletTx wtx;
+		std::string s1 = "<DATA/>";
+		CPubKey c;
+		bool fSuccess = GetPublicKeyFromExternalPurse(c);
+		if (!fSuccess)
+		{
+			results.push_back(Pair("Error", "pubkey not accessible."));
+		}
+		else
+		{
+			CBitcoinAddress cbEFA;
+			if (!cbEFA.SetString(sEFA))
+				throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Unable to use external purse address.");
+			double dMinCoinAge = 5;
+			bool fSent = FundWithExternalPurse(sError, cbEFA.Get(), 1 * COIN, fSubtractFee, wtx, fInstantSend, nMatched, s1, dMinCoinAge, c);
+			if (fSent)
+				results.push_back(Pair("txid", wtx.GetHash().GetHex()));
+			if (!fSent)
+				results.push_back(Pair("error", sError));
+		}
+	}
+	else if (sItem == "lresearchers")
+	{
+		std::map<std::string, Researcher> r = GetPayableResearchers();
+		BOOST_FOREACH(const PAIRTYPE(const std::string, Researcher)& myResearcher, r)
+		{
+			results.push_back(Pair("cpid", myResearcher.second.cpid));
+			results.push_back(Pair("rac", myResearcher.second.rac));
+			results.push_back(Pair("nickname", myResearcher.second.nickname));
+		}
+	}
+	else if (sItem == "pobh")
+	{
+		std::string sInput = request.params[1].get_str();
+		double d1 = cdbl(request.params[2].get_str(), 0);
+		uint256 hSource = uint256S("0x" + sInput);
+		uint256 h = BibleHashDebug(hSource, d1 == 1);
+		results.push_back(Pair("in-hash", hSource.GetHex()));
+		results.push_back(Pair("out-hash", h.GetHex()));
 	}
 	else if (sItem == "XBBP")
 	{

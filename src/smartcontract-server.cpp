@@ -57,6 +57,20 @@ std::string GetTxCPK(CTransactionRef tx, std::string& sCampaignName)
 	return sCPK;
 }
 
+double GetRequiredCoinAgeForPODC(double nRAC)
+{
+	// Todo for Prod Release:  Make sporks here
+	// We currently require RAC ^ 1.3 in coin-age
+	// Any CPIDs with RAC <= 250 are unbanked (they require 0 coin age).
+	double nAgeRequired = pow(nRAC, 1.3);
+	if (nRAC <= 250) 
+	{
+		// Mark the researcher as Unbanked here:
+		nAgeRequired = 0;
+	}
+	return nAgeRequired;
+}
+
 //////////////////////////////////////////////////////////////////////////////// Cameroon-One /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 double GetBBPPrice()
@@ -64,7 +78,7 @@ double GetBBPPrice()
 	static int64_t nLastPriceCheck = 0;
 	int64_t nElapsed = GetAdjustedTime() - nLastPriceCheck;
 	static double nLastPrice = 0;
-	if (nElapsed < (60 * 60))
+	if (nElapsed < (60 * 60) && nLastPrice > 0)
 	{
 		return nLastPrice;
 	}
@@ -74,6 +88,19 @@ double GetBBPPrice()
 	double out_BTC = 0;
 	nLastPrice = GetPBase(out_BTC);
 	return nLastPrice;
+}
+
+bool VerifyChild(std::string childID)
+{
+	std::map<std::string, CPK> cp1 = GetChildMap("cpk|cameroon-one");
+	std::string sMyCPK = DefaultRecAddress("Christian-Public-Key");
+	for (std::pair<std::string, CPK> a : cp1)
+	{
+		std::string sChildID = a.second.sOptData;
+		if (childID == sChildID)
+			return true;
+	}
+	return false;
 }
 
 double GetProminenceCap(std::string sCampaignName, double nPoints, double nProminence)
@@ -89,7 +116,9 @@ double GetProminenceCap(std::string sCampaignName, double nPoints, double nPromi
 	// Cap @ BBP Rate * Child Count
 	double nPrice = GetBBPPrice();
 	if (nPrice <= 0)
+	{
 		nPrice = .0004; // Guess
+	}
 	int nNextSuperblock = 0;
 	int nLastSuperblock = GetLastGSCSuperblockHeight(chainActive.Tip()->nHeight, nNextSuperblock);
 	CAmount nBudget = CSuperblock::GetPaymentsLimit(nNextSuperblock);
@@ -357,22 +386,25 @@ double CalculatePoints(std::string sCampaign, std::string sDiary, double nCoinAg
 	boost::to_upper(sCampaign);
 	double nPoints = 0;
 
-	if (sCampaign == "POG")
+	if (sCampaign == "WCG")
 	{
+		return nCoinAge;
+	}
+	else if (sCampaign == "POG")
+	{
+		// This project is being retired
 		double nComponent1 = nCoinAge;
 		double nTithed = (double)nDonation / COIN;
-		bool f666 = (nTithed == .666 || nTithed == 666.000 || nTithed == 6666.666 || nTithed == 6666 || nTithed == 666.666 || nTithed == 6660.00);
-		if (f666)          nTithed = 0;
 		if (nTithed < .25) nTithed = 0;
 		double nTitheFactor = GetSporkDouble("pogtithefactor", 1);
 		double nComponent2 = cbrt(nTithed) * nTitheFactor;
-		nPoints = nComponent1 * nComponent2;
+		nPoints = (nComponent1 * nComponent2) / 1000;
 		return nPoints;
 	}
 	else if (sCampaign == "HEALING")
 	{
 		double nMultiplier = sDiary.empty() ? 0 : 1;
-		nPoints = nCoinAge * nMultiplier;
+		nPoints = (nCoinAge * nMultiplier) / 1000;
 		return nPoints;
 	}
 	else if (sCampaign == "CAMEROON-ONE")
@@ -478,12 +510,31 @@ bool NickNameExists(std::string sProjectName, std::string sNickName)
 	return false;
 }
 
+std::string GetCPIDByCPK(std::string sCPK)
+{
+	std::string sData = ReadCache("CPK-WCG", sCPK);
+	std::vector<std::string> vP = Split(sData.c_str(), "|");
+	if (vP.size() < 10)
+		return std::string();
+	std::string cpid = vP[8];
+	return cpid;
+}
+
+std::string GetCPIDElementByData(std::string sData, int iElement)
+{
+	std::vector<std::string> vP = Split(sData.c_str(), "|");
+	if (vP.size() < 10)
+		return std::string();
+	return vP[iElement];
+}
+
 std::string AssessBlocks(int nHeight, bool fCreatingContract)
 {
 	CAmount nPaymentsLimit = CSuperblock::GetPaymentsLimit(nHeight);
 	nPaymentsLimit -= MAX_BLOCK_SUBSIDY * COIN;
 	CAmount nQTBuffer = nPaymentsLimit * .01;
 	nPaymentsLimit -= nQTBuffer;
+	std::map<std::string, Researcher> Researchers = GetPayableResearchers();
 
 	int64_t nPaymentBuffer = sporkManager.GetSporkValue(SPORK_31_GSC_BUFFER);
 	if (nPaymentBuffer > 0 && nPaymentBuffer < (nPaymentsLimit / COIN))
@@ -532,6 +583,25 @@ std::string AssessBlocks(int nHeight, bool fCreatingContract)
 					{
 						std::string sDiary = ExtractXML(block.vtx[n]->GetTxMessage(), "<diary>","</diary>");
 						double nPoints = CalculatePoints(sCampaignName, sDiary, nCoinAge, nDonation, sCPK);
+
+						if (sCampaignName == "WCG" && nPoints > 0)
+						{
+							std::string sCPID = GetCPIDByCPK(sCPK);
+
+							Researcher r = Researchers[sCPID];
+							if (r.found)
+							{
+								r.CoinAge += nPoints;
+								r.CPK = sCPK;
+								Researchers[sCPID] = r;
+							}
+							else
+							{
+								LogPrintf("\nAssessBlocks::Unable to find researcher for CPK %s with CPID %s", sCPK, sCPID);
+							}
+							nPoints = 0;
+						}
+
 						if (sCampaignName == "CAMEROON-ONE" && mCPKCampaignPoints[sCPK + sCampaignName].nPoints > 0)
 							nPoints = 0;
 						if (nPoints > 0)
@@ -575,7 +645,69 @@ std::string AssessBlocks(int nHeight, bool fCreatingContract)
 			}
 		}
 	}
+	// PODC 2.0
+	// This dedicated area allows us to pay the unbanked each day *or* the researchers with collateral staked.
+	// (In contrast to paying the list of collateralized CPIDs).
+	std::string sCampaignName = "WCG";
+	BOOST_FOREACH(PAIRTYPE(std::string, Researcher) r, Researchers)
+	{
+		if (r.second.found && r.second.cpid.length() == 32)
+		{
+			double nCoinAgeRequired = GetRequiredCoinAgeForPODC(r.second.rac);
+			if (nCoinAgeRequired > r.second.CoinAge)
+			{
+				// Reduce the researchers RAC to the applicable coinAge staked:
+				r.second.rac = pow(r.second.rac - 1, 1/1.3);
+				nCoinAgeRequired = GetRequiredCoinAgeForPODC(r.second.rac);
+			}
 
+			bool fApplicable = r.second.CoinAge >= nCoinAgeRequired;
+			if (!fApplicable)
+			{
+				LogPrintf("\nAssessBlocks::Researcher not applicable because CoinAge req %f is less than %f for CPID %s", nCoinAgeRequired, r.second.CoinAge, r.second.cpid);
+			}
+			else 
+			{
+				std::string sCPK = r.second.CPK;
+				double nPoints = r.second.rac * 1;
+				// CPK 
+				CPK c = mPoints[sCPK];
+				c.sCampaign = sCampaignName;
+				c.sAddress = sCPK;
+				CPK localCPK = GetCPKFromProject("cpk", sCPK);
+				c.sNickName = localCPK.sNickName;
+				c.nPoints += nPoints;
+				c.cpid = r.second.cpid;
+				mCampaignPoints[sCampaignName] += nPoints;
+				mPoints[sCPK] = c;
+				// CPK-Campaign
+				CPK cCPKCampaignPoints = mCPKCampaignPoints[sCPK + sCampaignName];
+				cCPKCampaignPoints.sAddress = sCPK;
+				cCPKCampaignPoints.sNickName = c.sNickName;
+				cCPKCampaignPoints.nPoints += nPoints;
+				cCPKCampaignPoints.cpid = r.second.cpid;
+				mCPKCampaignPoints[sCPK + sCampaignName] = cCPKCampaignPoints;
+				if (dDebugLevel == 1)
+				{
+					LogPrintf("\nCPK %s , NN %s, Points %f, Campaign %s, coinage %f, usertotal %f ",
+							sCPK, localCPK.sNickName, (double)nPoints, c.sCampaign, (double)r.second.CoinAge, (double)c.nPoints);
+				}
+				if (!sAnalyzeUser.empty() && sAnalyzeUser == c.sNickName)
+				{
+					std::string sInfo = "User: " + sCPK + ", NickName: " 
+									+ localCPK.sNickName + ", Points: " + RoundToString(nPoints, 2) 
+									+ ", Campaign: " + c.sCampaign + ", CoinAge: " + RoundToString(r.second.CoinAge, 4) 
+									+ ", CPID: " + r.second.cpid + ", RAC: " + RoundToString(r.second.rac, 4) 
+									+ ", UserTotal: " + RoundToString(c.nPoints, 2) + "\n";
+					sAnalysisData1 += sInfo;
+				}
+			}
+		}
+	}
+	
+	// End of PODC 2.0
+
+	
 	std::string sData;
 	std::string sGenData;
 	std::string sDetails;
@@ -605,7 +737,8 @@ std::string AssessBlocks(int nHeight, bool fCreatingContract)
 			if (fDebugSpam)
 				LogPrintf("\nUser %s, Campaign %s, Points %f, Prominence %f ", mCPKCampaignPoints[sKey].sAddress, sCampaignName, 
 				mCPKCampaignPoints[sKey].nPoints, mCPKCampaignPoints[sKey].nProminence);
-			std::string sRow = sCampaignName + "|" + Members.second.sAddress + "|" + RoundToString(mCPKCampaignPoints[sKey].nPoints, 0) + "|" 
+			std::string sLCN = sCampaignName == "WCG" && !Members.second.cpid.empty() ? sCampaignName + "-" + Members.second.cpid : sCampaignName;
+			std::string sRow = sLCN + "|" + Members.second.sAddress + "|" + RoundToString(mCPKCampaignPoints[sKey].nPoints, 0) + "|" 
 				+ RoundToString(mCPKCampaignPoints[sKey].nProminence, 8) + "|" + Members.second.sNickName + "|" + 
 				RoundToString(nCampaignPoints, 0) + "\n";
 			if (!sAnalyzeUser.empty() && sAnalyzeUser == Members.second.sNickName)
@@ -890,7 +1023,6 @@ bool SubmitGSCTrigger(std::string sHex, std::string& gobjecthash, std::string& s
 		return false;
 	}
 
-
 	uint256 txidFee;
 	uint256 hashParent = uint256();
 	int nRevision = 1;
@@ -1064,7 +1196,6 @@ void GetGovObjDataByPamHash(int nHeight, uint256 hPamHash, std::string& out_Data
 	}
 	out_Data = sData;
 }
-
 
 bool GetContractPaymentData(std::string sContract, int nBlockHeight, std::string& sPaymentAddresses, std::string& sAmounts)
 {
@@ -1263,6 +1394,19 @@ void CheckGSCHealth()
 	}
 }
 
+void SendOutGSCs()
+{
+	// In PODC 2.0, we send all of the GSCs out at the height shown in 'exec rac' from the main wallet thread.  (In contrast to sending them at a given time from the miner thread).
+	// This is generally done once per day; but can be overridden with the key: dailygscfrequency=block_frequency
+	// Note that the GSCs are now funded with coin-age from the external purse address (Christian-Public-Key).
+	// As of November 2nd, 2019:  We have the campaigns:  WCG (PODC), HEALING, and CAMEROON-ONE.
+	std::string sError;
+	LoadResearchers();
+	LogPrintf("\nSending out GSC Transmissions...%f\n", GetAdjustedTime());
+	bool fCreated = CreateAllGSCTransmissions(sError);
+	if (!fCreated)
+		LogPrintf("\nEGSCQP::SendOutGSCs::Unable to create client side GSC transaction. (See Log [%s]). ", sError);
+}
 
 std::string ExecuteGenericSmartContractQuorumProcess()
 {
@@ -1272,6 +1416,11 @@ std::string ExecuteGenericSmartContractQuorumProcess()
 	if (!ChainSynced(chainActive.Tip()))
 		return "CHAIN_NOT_SYNCED";
 	
+	int nFreq = (int)cdbl(GetArg("-dailygscfrequency", RoundToString(BLOCKS_PER_DAY, 0)), 0);
+	bool fGSCTime = (chainActive.Tip()->nHeight % nFreq == 0);
+	if (fGSCTime)
+		SendOutGSCs();
+
 	if (!fMasternodeMode)   
 		return "NOT_A_SANCTUARY";
 

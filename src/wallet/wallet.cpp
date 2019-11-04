@@ -221,9 +221,49 @@ bool CWallet::GetPubKey(const CKeyID &address, CPubKey& vchPubKeyOut) const
         return CCryptoKeyStore::GetPubKey(address, vchPubKeyOut);
 }
 
+bool CWallet::FindExternalKey(std::string sAddress, CKey& keyOut) const
+{
+	if (sAddress.empty() || sAddress.length() < 8)
+	{
+		LogPrintf("Unable to find external key %f.\n", 781);
+		return false;
+	}
+
+	std::string sPrivFile = GetEPArg(false);
+	std::string sPubFile = GetEPArg(true);
+	
+	if (sPubFile.empty() || sPrivFile.empty()) 
+	{
+		LogPrintf("ExternalPurse storage key empty. %f.\n", 782);
+		return false;
+	}
+	if (sAddress == sPubFile)
+	{
+		CBitcoinSecret vchSecret;
+		bool fGood = vchSecret.SetString(sPrivFile);
+		if (!fGood)
+		{
+			LogPrintf("Bad private key (boinc) %f", 783);
+			return false;
+		}
+		keyOut = vchSecret.GetKey();
+		if (!keyOut.IsValid()) 
+		{
+			LogPrintf("Unable to retrieve secret key material (boinc) %f", 784);
+			return false;
+		}
+		return true;
+	}
+	if (fDebugSpam)
+		LogPrintf("PubFileKey %s != InAddr %s %f", sPubFile, sAddress, 785);
+	return false;
+}
+
 bool CWallet::GetKey(const CKeyID &address, CKey& keyOut) const
 {
     LOCK(cs_wallet);
+	
+
     std::map<CKeyID, CHDPubKey>::const_iterator mi = mapHdPubKeys.find(address);
     if (mi != mapHdPubKeys.end())
     {
@@ -244,8 +284,17 @@ bool CWallet::GetKey(const CKeyID &address, CKey& keyOut) const
 
         return true;
     }
-    else {
-        return CCryptoKeyStore::GetKey(address, keyOut);
+    else 
+	{
+        bool fFound = CCryptoKeyStore::GetKey(address, keyOut);
+		if (!fFound)
+		{
+			CBitcoinAddress addr2(address);
+			bool fFound = FindExternalKey(addr2.ToString(), keyOut);
+			if (!fFound)
+				LogPrintf("\nFindExternalKey FAILED. For pubkey %s", addr2.ToString());
+			return fFound;
+		}
     }
 }
 
@@ -2922,21 +2971,20 @@ bool CWallet::SelectCoinsMinConf(const CAmount& nTargetValue, const int nConfMin
 }
 
 bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAmount& nTargetValue, std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet, CAmount& nValueRet, const CCoinControl* coinControl, 
-	AvailableCoinsType nCoinType, bool fUseInstantSend, double nMinCoinAge, CAmount nMinSpend) const
+	AvailableCoinsType nCoinType, bool fUseInstantSend, double nMinCoinAge, CAmount nMinSpend, CAmount nExactSpend, CPubKey vchPursePubKey) const
 {
     // Note: this function should never be used for "always free" tx types like dstx
 
     std::vector<COutput> vCoins(vAvailableCoins);
 	double nFoundCoinAge = 0;
 	CAmount nTotalRequired = 0;
-	// R Andrews - BIBLEPAY - If this is an ABN or GSC, we need to sort the AvailableCoins vector by amount, and use the smallest coins first
+	// R Andrews - BIBLEPAY - If this is an ABN or GSC, we need to sort the AvailableCoins vector by amount, and use the smallest coin-age(s) first
 	if (nMinCoinAge > 0)
 	{
 		std::sort(vCoins.rbegin(), vCoins.rend(), CompareByCoinAge());
 		std::string sCache;
 		int nInputsConsumed = 0;
 		static int MAX_GSC_INPUTS = 500;  // Using more than this may break size limits
-
 
  		BOOST_FOREACH(const COutput& out, vAvailableCoins)
         {
@@ -2948,6 +2996,18 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
 			int nDepth = pcoin->GetDepthInMainChain();
 			double nAge = 0;
 			double nWeight = GetCoinWeight(out, nAge);
+			if (nExactSpend > 0 && vchPursePubKey != CPubKey())
+			{
+				CBitcoinAddress cba(vchPursePubKey.GetID());
+				std::string sKeyPurseKey = cba.ToString();
+				std::string sKnownRecip = PubKeyToAddress(out.tx->tx->vout[out.i].scriptPubKey);
+
+				if (sKnownRecip != sKeyPurseKey)
+					continue;
+				if (fDebugSpam)
+					LogPrintf(" Found matching Recip %s for %f ", sKnownRecip, (double)out.tx->tx->vout[out.i].nValue);
+			}
+
 			if (nWeight > 0)
 			{
 				nTotalRequired += nAmount;
@@ -2957,7 +3017,7 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
 				nValueRet += out.tx->tx->vout[out.i].nValue;
 				setCoinsRet.insert(std::make_pair(out.tx, out.i));
 				nInputsConsumed++;
-				}
+			}
 			if (nInputsConsumed > MAX_GSC_INPUTS)
 				break;
 			if (nFoundCoinAge > nMinCoinAge && nTotalRequired >= nMinSpend && nValueRet >= nTargetValue) 
@@ -3488,6 +3548,44 @@ bool CWallet::ConvertList(std::vector<CTxIn> vecTxIn, std::vector<CAmount>& vecA
     return true;
 }
 
+std::vector<COutput> CWallet::GetExternalPurseBalance(std::string sPurseAddress, CAmount nMinRequiredExpenditure, CAmount& nMatched, CAmount& nTotal)
+{
+	std::vector<COutput> vAvailableCoins;
+	nTotal = 0;
+	std::vector<COutput> vOut;
+	bool fUseInstantSend = false;
+	double nMinCoinAge = 0;
+	LOCK2(cs_main, cs_wallet);
+    {
+	    AvailableCoins(vAvailableCoins, true, NULL, false, ALL_COINS, fUseInstantSend, nMinCoinAge, 0);
+	}
+	double nFoundCoinAge = 0;
+	int nInputsConsumed = 0;
+	
+	BOOST_FOREACH(const COutput& out, vAvailableCoins)
+    {
+		if(!out.fSpendable)
+                continue;
+		
+		const CWalletTx *pcoin = out.tx;
+		CAmount nAmount = pcoin->tx->vout[out.i].nValue;
+		std::string sPurse = PubKeyToAddress(pcoin->tx->vout[out.i].scriptPubKey);
+		int nDepth = pcoin->GetDepthInMainChain();
+		if (nDepth > 0 && sPurse == sPurseAddress)
+		{
+			nTotal += nAmount;
+			if (nAmount > (nMinRequiredExpenditure + (1*COIN)))
+			{
+				nMatched = nAmount;
+				vOut.push_back(out);
+			}
+		}
+		
+	}
+	return vOut;
+}
+
+
 double CWallet::GetAntiBotNetWalletWeight(double nMinCoinAge, CAmount& nTotalRequired)
 {
 	std::vector<COutput> vAvailableCoins;
@@ -3504,16 +3602,24 @@ double CWallet::GetAntiBotNetWalletWeight(double nMinCoinAge, CAmount& nTotalReq
 	int nInputsConsumed = 0;
 	static int MAX_GSC_INPUTS = 500;  // Using more than this may break size limits
 
+	std::string sPubKey = GetEPArg(true);
+
 	BOOST_FOREACH(const COutput& out, vAvailableCoins)
     {
 		if(!out.fSpendable)
                 continue;
-		
+		// Ensure this is spendable 
 		const CWalletTx *pcoin = out.tx;
+		std::string sActualRecip = PubKeyToAddress(pcoin->tx->vout[out.i].scriptPubKey);
+
+		if (sActualRecip != sPubKey)
+			continue;
+
 		CAmount nAmount = pcoin->tx->vout[out.i].nValue;
 		int nDepth = pcoin->GetDepthInMainChain();
 		double nAge = 0;
 		double nWeight = GetCoinWeight(out, nAge);
+		
 		if (nWeight > 0)
 		{
 			nTotalRequired += nAmount;
@@ -3536,7 +3642,7 @@ double CWallet::GetAntiBotNetWalletWeight(double nMinCoinAge, CAmount& nTotalReq
 
 bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletTx& wtxNew, CReserveKey& reservekey, CAmount& nFeeRet,
                                 int& nChangePosInOut, std::string& strFailReason, const CCoinControl* coinControl, bool sign, AvailableCoinsType nCoinType,
-								bool fUseInstantSend, int nExtraPayloadSize, std::string sOptPrayerData, double dMinCoinAge, CAmount nMinSpend)
+								bool fUseInstantSend, int nExtraPayloadSize, std::string sOptPrayerData, double dMinCoinAge, CAmount nMinSpend, CAmount nExactSpend, CPubKey vchPursePubKey)
 {
     if (!llmq::IsOldInstantSendEnabled()) {
         // The new system does not require special handling for InstantSend as this is all done in CInstantSendManager.
@@ -3664,7 +3770,7 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
                 // Choose coins to use
                 CAmount nValueIn = 0;
                 setCoins.clear();
-				if (!SelectCoins(vAvailableCoins, nValueToSelect, setCoins, nValueIn, coinControl, nCoinType, fUseInstantSend, dMinCoinAge, nMinSpend))
+				if (!SelectCoins(vAvailableCoins, nValueToSelect, setCoins, nValueIn, coinControl, nCoinType, fUseInstantSend, dMinCoinAge, nMinSpend, nExactSpend, vchPursePubKey))
                 {
                     if (nCoinType == ONLY_NONDENOMINATED) {
                         strFailReason = _("Unable to locate enough PrivateSend non-denominated funds for this transaction.");
@@ -3720,14 +3826,22 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
                             //  post-backup change.
 
                             // Reserve a new key pair from key pool
-                            CPubKey vchPubKey;
-                            if (!reservekey.GetReservedKey(vchPubKey, true))
-                            {
-                                strFailReason = _("Keypool ran out, please call keypoolrefill first");
-                                return false;
-                            }
-                            scriptChange = GetScriptForDestination(vchPubKey.GetID());
-                        }
+							if (vchPursePubKey != CPubKey())
+							{
+								// BBP - R Andrews - 10-27-2019 - Exact spent non-financial transaction send change back to external purse:
+								scriptChange = GetScriptForDestination(vchPursePubKey.GetID());
+							}
+							else
+							{
+	                            CPubKey vchPubKey;
+		                        if (!reservekey.GetReservedKey(vchPubKey, true))
+			                    {
+				                    strFailReason = _("Keypool ran out, please call keypoolrefill first");
+					                return false;
+						        }
+							    scriptChange = GetScriptForDestination(vchPubKey.GetID());
+							}
+				        }
 
                         newTxOut = CTxOut(nChange, scriptChange);
 

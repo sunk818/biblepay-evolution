@@ -143,6 +143,7 @@ const boost::filesystem::path &GetDataDir(bool fNetSpecific = true);
 boost::filesystem::path GetBackupsDir();
 void ClearDatadirCache();
 boost::filesystem::path GetMasternodeConfigFile();
+boost::filesystem::path GetDeterministicConfigFile();
 boost::filesystem::path GetConfigFile(const std::string& confPath);
 #ifndef WIN32
 boost::filesystem::path GetPidFile();

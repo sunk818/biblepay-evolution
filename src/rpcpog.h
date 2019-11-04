@@ -38,6 +38,7 @@ struct CPK
   std::string sError;
   std::string sChildId;
   std::string sOptData;
+  std::string cpid;
   double nProminence = 0;
   double nPoints = 0;
   bool fValid = false;
@@ -50,6 +51,22 @@ struct BBPResult
 	std::string ErrorCode;
 };
 
+struct Researcher
+{
+	std::string nickname;
+	int teamid = 0;
+	std::string country;
+	int64_t creationtime = 0;
+	double totalcredit = 0;
+	double wcgpoints = 0;
+	double rac = 0;
+	int id = 0;
+	std::string cpid;
+	bool found = false;
+	bool unbanked = false;
+	double CoinAge = 0;
+	std::string CPK;
+};
 
 struct BiblePayProposal
 {
@@ -162,7 +179,8 @@ bool Contains(std::string data, std::string instring);
 std::string GetVersionAlert();
 bool CheckNonce(bool f9000, unsigned int nNonce, int nPrevHeight, int64_t nPrevBlockTime, int64_t nBlockTime, const Consensus::Params& params);
 bool RPCSendMoney(std::string& sError, const CTxDestination &address, CAmount nValue, bool fSubtractFeeFromAmount, CWalletTx& wtxNew, bool fUseInstantSend=false, std::string sOptionalData = "");
-
+bool FundWithExternalPurse(std::string& sError, const CTxDestination &address, CAmount nValue, bool fSubtractFeeFromAmount, CWalletTx& wtxNew, 
+	bool fUseInstantSend, CAmount nExactAmount, std::string sOptionalData, double dMinCoinAge, CPubKey vchPursePubKey);
 
 std::vector<char> ReadBytesAll(char const* filename);
 std::string VectToString(std::vector<unsigned char> v);
@@ -227,5 +245,13 @@ void ProcessBLSCommand(CTransactionRef tx);
 void UpdateHealthInformation();
 BBPResult GetDecentralizedURL();
 std::string BIPFS_Payment(CAmount nAmount, std::string sTXID, std::string sXML);
+BBPResult DSQL_ReadOnlyQuery(std::string sXMLSource);
+int LoadResearchers();
+std::string TeamToName(int iTeamID);
+std::string GetResearcherCPID();
+bool CreateExternalPurse(std::string& sError);
+bool GetPublicKeyFromExternalPurse(CPubKey& c);
+bool VerifyMemoryPoolCPID(CTransaction tx);
+std::string GetEPArg(bool fPublic);
 
 #endif
