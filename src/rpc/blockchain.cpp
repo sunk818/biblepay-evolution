@@ -3268,7 +3268,7 @@ UniValue exec(const JSONRPCRequest& request)
 		CAmount nTotal = 0;
 		std::string sEFA = DefaultRecAddress("Christian-Public-Key");
 		std::vector<COutput> cCoins = pwalletMain->GetExternalPurseBalance(sEFA, 1*COIN, nMatched, nTotal);
-		results.push_back(Pair("purse size", cCoins.size()));
+		// results.push_back(Pair("purse size", cCoins.size()));
 		results.push_back(Pair("purse amount matched", (double)nMatched/COIN));
 		results.push_back(Pair("purse total", (double)nTotal/COIN));
 		bool fSubtractFee = false;
