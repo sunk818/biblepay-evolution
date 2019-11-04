@@ -2971,7 +2971,7 @@ bool CWallet::SelectCoinsMinConf(const CAmount& nTargetValue, const int nConfMin
 }
 
 bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAmount& nTargetValue, std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet, CAmount& nValueRet, const CCoinControl* coinControl, 
-	AvailableCoinsType nCoinType, bool fUseInstantSend, double nMinCoinAge, CAmount nMinSpend, CAmount nExactSpend, CPubKey vchPursePubKey) const
+	AvailableCoinsType nCoinType, bool fUseInstantSend, double nMinCoinAge, CAmount nMinSpend, CAmount nExactSpend, std::string sPursePubKey) const
 {
     // Note: this function should never be used for "always free" tx types like dstx
 
@@ -2996,9 +2996,9 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
 			int nDepth = pcoin->GetDepthInMainChain();
 			double nAge = 0;
 			double nWeight = GetCoinWeight(out, nAge);
-			if (nExactSpend > 0 && vchPursePubKey != CPubKey())
+			if (nExactSpend > 0 && !sPursePubKey.empty())
 			{
-				CBitcoinAddress cba(vchPursePubKey.GetID());
+				CBitcoinAddress cba(sPursePubKey);
 				std::string sKeyPurseKey = cba.ToString();
 				std::string sKnownRecip = PubKeyToAddress(out.tx->tx->vout[out.i].scriptPubKey);
 
@@ -3642,7 +3642,8 @@ double CWallet::GetAntiBotNetWalletWeight(double nMinCoinAge, CAmount& nTotalReq
 
 bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletTx& wtxNew, CReserveKey& reservekey, CAmount& nFeeRet,
                                 int& nChangePosInOut, std::string& strFailReason, const CCoinControl* coinControl, bool sign, AvailableCoinsType nCoinType,
-								bool fUseInstantSend, int nExtraPayloadSize, std::string sOptPrayerData, double dMinCoinAge, CAmount nMinSpend, CAmount nExactSpend, CPubKey vchPursePubKey)
+								bool fUseInstantSend, int nExtraPayloadSize, std::string sOptPrayerData, double dMinCoinAge, CAmount nMinSpend, 
+								CAmount nExactSpend, std::string sPursePubKey)
 {
     if (!llmq::IsOldInstantSendEnabled()) {
         // The new system does not require special handling for InstantSend as this is all done in CInstantSendManager.
@@ -3770,7 +3771,7 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
                 // Choose coins to use
                 CAmount nValueIn = 0;
                 setCoins.clear();
-				if (!SelectCoins(vAvailableCoins, nValueToSelect, setCoins, nValueIn, coinControl, nCoinType, fUseInstantSend, dMinCoinAge, nMinSpend, nExactSpend, vchPursePubKey))
+				if (!SelectCoins(vAvailableCoins, nValueToSelect, setCoins, nValueIn, coinControl, nCoinType, fUseInstantSend, dMinCoinAge, nMinSpend, nExactSpend, sPursePubKey))
                 {
                     if (nCoinType == ONLY_NONDENOMINATED) {
                         strFailReason = _("Unable to locate enough PrivateSend non-denominated funds for this transaction.");
@@ -3826,10 +3827,14 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
                             //  post-backup change.
 
                             // Reserve a new key pair from key pool
-							if (vchPursePubKey != CPubKey())
+							if (nExactSpend > 0 && !sPursePubKey.empty())
 							{
-								// BBP - R Andrews - 10-27-2019 - Exact spent non-financial transaction send change back to external purse:
-								scriptChange = GetScriptForDestination(vchPursePubKey.GetID());
+								// BBP - R Andrews - 11-4-2019 - Exact spent non-financial transaction send change back to external purse:
+						        CBitcoinAddress baPurse(sPursePubKey);
+							    if (baPurse.IsValid()) 
+								{
+									scriptChange = GetScriptForDestination(baPurse.Get());
+								}
 							}
 							else
 							{
@@ -3941,6 +3946,9 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
                     CScript& scriptSigRes = txNew.vin[nIn].scriptSig;
                     if (!ProduceSignature(DummySignatureCreator(this), scriptPubKey, scriptSigRes))
                     {
+						std::string sRecipient = PubKeyToAddress(scriptPubKey);
+
+						LogPrintf("Unable to calculate fee, signing failed for \n %s", sRecipient);
                         strFailReason = _("Signing transaction failed");
                         return false;
                     }
@@ -4039,6 +4047,10 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
 
                 if (!ProduceSignature(TransactionSignatureCreator(this, &txNewConst, nIn, SIGHASH_ALL), scriptPubKey, scriptSigRes))
                 {
+					std::string sRecipient = PubKeyToAddress(scriptPubKey);
+					// Problem here
+					LogPrintf("\nUnable to actually sign %s ", sRecipient);
+
                     strFailReason = _("Signing transaction failed");
                     return false;
                 }

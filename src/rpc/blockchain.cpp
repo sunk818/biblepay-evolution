@@ -2473,7 +2473,7 @@ UniValue exec(const JSONRPCRequest& request)
 		std::string sError;
 		if (!CheckCampaign(sProject))
 			throw std::runtime_error("Campaign does not exist.");
-		bool fAdv = AdvertiseChristianPublicKeypair("cpk-" + sProject, "", sOptData, "", false, fForce, 0, "", sError);
+		bool fAdv = AdvertiseChristianPublicKeypair("cpk-" + sProject, "", sOptData, "", false, true, 0, "", sError);
 
 		results.push_back(Pair("Results", fAdv));
 		if (!fAdv)
@@ -3288,7 +3288,7 @@ UniValue exec(const JSONRPCRequest& request)
 			if (!cbEFA.SetString(sEFA))
 				throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Unable to use external purse address.");
 			double dMinCoinAge = 5;
-			bool fSent = FundWithExternalPurse(sError, cbEFA.Get(), 1 * COIN, fSubtractFee, wtx, fInstantSend, nMatched, s1, dMinCoinAge, c);
+			bool fSent = FundWithExternalPurse(sError, cbEFA.Get(), 1 * COIN, fSubtractFee, wtx, fInstantSend, nMatched, s1, dMinCoinAge, sEFA);
 			if (fSent)
 				results.push_back(Pair("txid", wtx.GetHash().GetHex()));
 			if (!fSent)

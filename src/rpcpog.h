@@ -180,7 +180,7 @@ std::string GetVersionAlert();
 bool CheckNonce(bool f9000, unsigned int nNonce, int nPrevHeight, int64_t nPrevBlockTime, int64_t nBlockTime, const Consensus::Params& params);
 bool RPCSendMoney(std::string& sError, const CTxDestination &address, CAmount nValue, bool fSubtractFeeFromAmount, CWalletTx& wtxNew, bool fUseInstantSend=false, std::string sOptionalData = "");
 bool FundWithExternalPurse(std::string& sError, const CTxDestination &address, CAmount nValue, bool fSubtractFeeFromAmount, CWalletTx& wtxNew, 
-	bool fUseInstantSend, CAmount nExactAmount, std::string sOptionalData, double dMinCoinAge, CPubKey vchPursePubKey);
+	bool fUseInstantSend, CAmount nExactAmount, std::string sOptionalData, double dMinCoinAge, std::string sPursePubKey);
 
 std::vector<char> ReadBytesAll(char const* filename);
 std::string VectToString(std::vector<unsigned char> v);

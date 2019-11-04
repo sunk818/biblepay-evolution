@@ -342,12 +342,14 @@ static CCriticalSection csReadWait;
 std::string ReadCache(std::string sSection, std::string sKey)
 {
 	LOCK(csReadWait);
-	boost::to_upper(sSection);
-	boost::to_upper(sKey);
+	std::string sLookupSection = sSection;
+	std::string sLookupKey = sKey;
+	boost::to_upper(sLookupSection);
+	boost::to_upper(sLookupKey);
 	// NON-CRITICAL TODO : Find a way to eliminate this to_upper while we transition to non-financial transactions
-	if (sSection.empty() || sKey.empty())
+	if (sLookupSection.empty() || sLookupKey.empty())
 		return std::string();
-	std::pair<std::string, int64_t> t = mvApplicationCache[std::make_pair(sSection, sKey)];
+	std::pair<std::string, int64_t> t = mvApplicationCache[std::make_pair(sLookupSection, sLookupKey)];
 	return t.first;
 }
 
@@ -660,7 +662,7 @@ bool GetPublicKeyFromExternalPurse(CPubKey& c)
 }
 
 bool FundWithExternalPurse(std::string& sError, const CTxDestination &address, CAmount nValue, bool fSubtractFeeFromAmount, CWalletTx& wtxNew, 
-	bool fUseInstantSend, CAmount nExactAmount, std::string sOptionalData, double dMinCoinAge, CPubKey vchPursePubKey)
+	bool fUseInstantSend, CAmount nExactAmount, std::string sOptionalData, double dMinCoinAge, std::string sPursePubKey)
 {
 
 	// ** Note **:  We only allow external purse funded transactions to fund our own destination purse address through GSCs and through coin-age only. 
@@ -700,7 +702,7 @@ bool FundWithExternalPurse(std::string& sError, const CTxDestination &address, C
 	// We must pass minCoinAge == .01+, and nExactSpend == purses vout to use this feature:
 	
     if (!pwalletMain->CreateTransaction(vecSend, wtxNew, reservekey, nFeeRequired, nChangePosRet, strError, NULL, true, ONLY_NONDENOMINATED, fUseInstantSend, 0, 
-		sOptionalData, dMinCoinAge, 0, nExactAmount, vchPursePubKey)) 
+		sOptionalData, dMinCoinAge, 0, nExactAmount, sPursePubKey))
 	{
         if (!fSubtractFeeFromAmount && nValue + nFeeRequired > pwalletMain->GetBalance())
 		{
@@ -2380,8 +2382,7 @@ bool AdvertiseChristianPublicKeypair(std::string sProjectId, std::string sNickNa
 			}
 		}
 	}
-	std::string sPK = sCPK;
-	std::string sRec = GetCPKData(sProjectId, sPK);
+	std::string sRec = GetCPKData(sProjectId, sCPK);
 	if (fUnJoin)
 	{
 		if (sRec.empty()) {
@@ -2403,7 +2404,7 @@ bool AdvertiseChristianPublicKeypair(std::string sProjectId, std::string sNickNa
 
 	double nLastCPK = ReadCacheDouble(sProjectId);
 	const Consensus::Params& consensusParams = Params().GetConsensus();
-	if ((chainActive.Tip()->nHeight - nLastCPK) < 4 && nLastCPK > 0)
+	if ((chainActive.Tip()->nHeight - nLastCPK) < 4 && nLastCPK > 0 && !fForce)
     {
 		sError = _("A CPK was advertised less then 4 blocks ago. Please wait for your CPK to enter the chain.");
         return false;
@@ -2423,9 +2424,13 @@ bool AdvertiseChristianPublicKeypair(std::string sProjectId, std::string sNickNa
 	sNickName = SanitizeString(sNickName);
 	LIMITED_STRING(sNickName, 20);
 	std::string sMsg = GetRandHash().GetHex();
+	std::string sDataPK = sCPK;
+
 	if (fUnJoin)
-		sPK = std::string();
-	std::string sData = sPK + "|" + sNickName + "|" + RoundToString(GetAdjustedTime(),0) + "|" + sMsg;
+	{
+		sDataPK = "";
+	}
+	std::string sData = sDataPK + "|" + sNickName + "|" + RoundToString(GetAdjustedTime(),0) + "|" + sMsg;
 	std::string sSignature;
 	bool bSigned = false;
 	bSigned = SignStake(sCPK, sMsg, sError, sSignature);

@@ -258,9 +258,8 @@ CWalletTx CreateGSCClientTransmission(std::string sCampaign, std::string sDiary,
 		return wtx;
 	}
 
-	CPubKey c;
-	bool fSuccess = GetPublicKeyFromExternalPurse(c);
-	if (!fSuccess)
+	std::string sPubPurseKey = GetEPArg(true);
+	if (sPubPurseKey.empty())
 	{
 		sError = "Sorry, you must set up an external purse to send GSC transmissions.  Please type 'exec createpurse help'.";
 		return wtx;
@@ -315,7 +314,7 @@ CWalletTx CreateGSCClientTransmission(std::string sCampaign, std::string sDiary,
 	std::string strError;
 
 	bool fCreated = pwalletMain->CreateTransaction(vecSend, wtx, reservekey, nFeeRequired, nChangePosRet, strError, NULL, true, 
-		ALL_COINS, false, 0, sXML, nTargetCoinAge, nTargetSpend, .01, c);
+		ALL_COINS, false, 0, sXML, nTargetCoinAge, nTargetSpend, .01, sPubPurseKey);
 
 	if (!fCreated)    
 	{

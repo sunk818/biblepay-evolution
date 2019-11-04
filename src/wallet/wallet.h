@@ -689,7 +689,8 @@ private:
      * if they are not ours
      */
     bool SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAmount& nTargetValue, std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet, CAmount& nValueRet, 
-		const CCoinControl *coinControl = NULL, AvailableCoinsType nCoinType=ALL_COINS, bool fUseInstantSend = true, double dMinCoinAge = 0, CAmount nMinSpend = 0, CAmount nExactAmount = 0, CPubKey vchPursePubKey = CPubKey()) const;
+		const CCoinControl *coinControl = NULL, AvailableCoinsType nCoinType=ALL_COINS, bool fUseInstantSend = true, double dMinCoinAge = 0,
+		CAmount nMinSpend = 0, CAmount nExactAmount = 0, std::string sPursePubKey = "") const;
 
     CWalletDB *pwalletdbEncryption;
 
@@ -1000,7 +1001,7 @@ public:
     bool CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletTx& wtxNew, CReserveKey& reservekey, CAmount& nFeeRet, int& nChangePosInOut,
                            std::string& strFailReason, const CCoinControl *coinControl = NULL, bool sign = true, AvailableCoinsType nCoinType=ALL_COINS,
 						   bool fUseInstantSend=false, int nExtraPayloadSize = 0, std::string sOptionalPrayerData = "", double dMinCoinAge = 0, 
-						   CAmount nMinSpend = 0, CAmount nExactSpend = 0, CPubKey vchPursePubKey = CPubKey());
+						   CAmount nMinSpend = 0, CAmount nExactSpend = 0, std::string sPursePubKey = "");
     bool CommitTransaction(CWalletTx& wtxNew, CReserveKey& reservekey, CConnman* connman, CValidationState& state, const std::string& strCommand="tx");
 
     bool CreateCollateralTransaction(CMutableTransaction& txCollateral, std::string& strReason);
