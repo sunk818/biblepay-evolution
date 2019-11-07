@@ -1776,7 +1776,7 @@ void BoincHelpfulHint(UniValue& e)
 {
 	e.push_back(Pair("Step 1", "Log into your WCG account at 'worldcommunitygrid.org' with your WCG E-mail address and WCG password."));
 	e.push_back(Pair("Step 2", "Click Settings | My Profile.  Record your 'Username' and 'Verification Code' and your 'CPID' (Cross-Project-ID)."));
-	e.push_back(Pair("Step 3", "From our RPC console, type, exec join wcg your_username your_verification_code"));
+	e.push_back(Pair("Step 3", "From our RPC console, type, exec associate wcg your_username your_verification_code"));
 	e.push_back(Pair("Step 4", "Wait for 5 blocks to pass.  Then type 'exec rac' again, and see if you are linked!  "));
 	e.push_back(Pair("Step 5", "Once you are linked you will receive daily rewards.  Please read about our minimum stake requirements per RAC here: wiki.biblepay.org/PODC"));
 }
@@ -2418,7 +2418,7 @@ UniValue exec(const JSONRPCRequest& request)
 		results.push_back(Pair("wcg_member_id", nID));
 		results.push_back(Pair("wcg_points", nPoints));
 		Researcher r = GetResearcherByID(nID);
-		if (!r.found || r.cpid.length() != 32)
+		if (!r.found && !fForce && nID > 0)
 		{
 			std::string sErr = "Sorry, we found you as a researcher in WCG, but we were unable to locate you on the team.  "
 				 "Please join team BiblePay or team Gridcoin to proceed.  Please type 'exec rac' to see more helpful hints.  "
@@ -2929,8 +2929,9 @@ UniValue exec(const JSONRPCRequest& request)
 
 		results.push_back(Pair("cpid", sCPID));
 		Researcher r = mvResearchers[sCPID];
-		if (!r.found)
+		if (!r.found && sCPID.length() == 32)
 		{
+			results.push_back(Pair("temporary_cpid", sCPID));
 			results.push_back(Pair("Error", "Your CPID is linked to your CPK, but we are unable to find your research records in WCG; most likely because you are not in team BiblePay yet."));
 			BoincHelpfulHint(results);
 			return results;

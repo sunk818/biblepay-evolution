@@ -326,6 +326,8 @@ std::map<std::string, Researcher> GetPayableResearchers()
 	// The CPID is Unbanked if the RAC < 250
 	// Unbanked researchers do not need to post daily stake collateral
 	// Banked researchers do need to post daily stake collateral:  RAC^1.30 in COIN-AGE per day
+	std::vector<std::tuple<int64_t, std::string, std::string> > vFIFO;
+	vFIFO.reserve(mvResearchers.size() * 2);
 	std::map<std::string, Researcher> r;
 	std::map<std::string, std::string> cpid_reverse_lookup;
 	for (auto ii : mvApplicationCache)
@@ -333,15 +335,27 @@ std::map<std::string, Researcher> GetPayableResearchers()
 		if (Contains(ii.first.first, "CPK-WCG"))
 		{
 			std::string sData = ii.second.first;
-
+			int64_t nLockTime = ii.second.second;
 			std::string cpid = GetCPIDElementByData(sData, 8);
 			std::string sCPK = GetCPIDElementByData(sData, 0);
-			cpid_reverse_lookup[cpid] = sCPK;
-			LogPrintf("\nGPR0::Adding CPID %s for %s for data %s", cpid, sCPK, sData);
+			vFIFO.push_back(std::make_tuple(nLockTime, cpid, sCPK));
+			LogPrintf("cpid %s cpk %s locktime %f", cpid, sCPK, nLockTime);
 		}
 	}
+		
+
+    // LIFO Sort
+	std::sort(vFIFO.begin(), vFIFO.end());
+
+	for (auto item : vFIFO)
+    {
+		std::string cpid = std::get<1>(item); //item.second;
+		std::string sCPK = std::get<2>(item); //item.third;
+		cpid_reverse_lookup[cpid] = sCPK;
+		LogPrintf("Adding cpid %s with %s ", cpid, sCPK);
+	}
 	
-	
+	// Payable Researchers
 	BOOST_FOREACH(const PAIRTYPE(const std::string, Researcher)& myResearcher, mvResearchers)
     {
 		if (myResearcher.second.found)
