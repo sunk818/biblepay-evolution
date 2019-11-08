@@ -625,6 +625,8 @@ bool CreateExternalPurse(std::string& sError)
 	// Encrypt the secret, so hackers cannot easily gain access to the privkey - even if they get physical access to the biblepay.conf file
 	std::string sEncSecret = EncryptAES256(ssecret, sBoinc);
 	// Store the pubkey unencrypted and the privkey encrypted in the biblepay.conf file:		
+	WriteKey("externalpurse", sBoinc);
+	ForceSetArg("externalpurse", sBoinc);
 	WriteKey("externalprivkey" + sBoinc.substr(0,8), sEncSecret);
 	WriteKey("externalpubkey" + sBoinc.substr(0,8), sBoinc);
 	ForceSetArg("externalprivkey" + sBoinc.substr(0,8), sEncSecret);
@@ -3395,8 +3397,8 @@ bool VerifyMemoryPoolCPID(CTransaction tx)
 
 std::string GetEPArg(bool fPublic)
 {
-	std::string sEPA = DefaultRecAddress("Christian-Public-Key");
-	if (sEPA.length() < 8)
+	std::string sEPA = GetArg("-externalpurse", "");
+	if (sEPA.empty() || sEPA.length() < 8)
 		return std::string();
 	std::string sPubFile = GetArg("-externalpubkey" + sEPA.substr(0,8), "");
 	if (fPublic)
