@@ -263,7 +263,6 @@ bool CWallet::GetKey(const CKeyID &address, CKey& keyOut) const
 {
     LOCK(cs_wallet);
 	
-
     std::map<CKeyID, CHDPubKey>::const_iterator mi = mapHdPubKeys.find(address);
     if (mi != mapHdPubKeys.end())
     {
@@ -286,24 +285,16 @@ bool CWallet::GetKey(const CKeyID &address, CKey& keyOut) const
     }
     else 
 	{
-        bool fFound = CCryptoKeyStore::GetKey(address, keyOut);
-		if (!fFound)
+		CBitcoinAddress addr2(address);
+		std::string sPubFile = GetEPArg(true);
+		// Only if External:
+		if 	(!sPubFile.empty() && sPubFile == addr2.ToString())
 		{
-			CBitcoinAddress addr2(address);
-		    if (!addr2.IsValid()) 
-				return false;
-			
-			bool fFound2 = FindExternalKey(addr2.ToString(), keyOut);
-			if (!fFound2)
-			{
-				LogPrintf("\nFindExternalKey FAILED. %f", 897);
-				return CCryptoKeyStore::GetKey(address, keyOut);
-			}
-			else
-			{
-				return true;
-			}
+			// Route External
+			return FindExternalKey(addr2.ToString(), keyOut);
 		}
+		// Fall back to original design:
+        return CCryptoKeyStore::GetKey(address, keyOut);
     }
 }
 
