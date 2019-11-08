@@ -290,10 +290,19 @@ bool CWallet::GetKey(const CKeyID &address, CKey& keyOut) const
 		if (!fFound)
 		{
 			CBitcoinAddress addr2(address);
-			bool fFound = FindExternalKey(addr2.ToString(), keyOut);
-			if (!fFound)
-				LogPrintf("\nFindExternalKey FAILED. For pubkey %s", addr2.ToString());
-			return fFound;
+		    if (!addr2.IsValid()) 
+				return false;
+			
+			bool fFound2 = FindExternalKey(addr2.ToString(), keyOut);
+			if (!fFound2)
+			{
+				LogPrintf("\nFindExternalKey FAILED. %f", 897);
+				return CCryptoKeyStore::GetKey(address, keyOut);
+			}
+			else
+			{
+				return true;
+			}
 		}
     }
 }

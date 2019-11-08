@@ -3240,7 +3240,7 @@ UniValue exec(const JSONRPCRequest& request)
 		// Allows user to display a configuration value (useful if you are not sure if you entered a config value in your file)
 		std::string sArg = request.params[1].get_str();
 		std::string sValue = GetArg("-" + sArg, "");
-		results.push_back(Pair("arg", sValue));
+		results.push_back(Pair("arg v2.0", sValue));
 	}
 	else if (sItem == "createpurse")
 	{
