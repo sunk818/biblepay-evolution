@@ -3426,7 +3426,12 @@ std::string GetEPArg(bool fPublic)
 	if (sEPA.length() < 8)
 		return std::string();
 	std::string sPubFile = GetArg("-externalpubkey" + sEPA.substr(0,8), "");
+	if (fPublic)
+		return sPubFile;
 	std::string sPrivFile = GetArg("-externalprivkey" + sEPA.substr(0,8), "");
+	if (sPrivFile.empty())
+		return std::string();
 	std::string sUsable = DecryptAES256(sPrivFile, sEPA);
-	return fPublic ? sPubFile : sUsable;
+	return sUsable;
 }
+
