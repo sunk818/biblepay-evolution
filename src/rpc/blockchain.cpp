@@ -3277,9 +3277,8 @@ UniValue exec(const JSONRPCRequest& request)
 		std::string sError;
 	    CWalletTx wtx;
 		std::string s1 = "<DATA/>";
-		CPubKey c;
-		bool fSuccess = GetPublicKeyFromExternalPurse(c);
-		if (!fSuccess)
+		std::string sPubFile = GetEPArg(true);
+		if (sPubFile.empty())
 		{
 			results.push_back(Pair("Error", "pubkey not accessible."));
 		}

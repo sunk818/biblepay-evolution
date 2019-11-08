@@ -58,6 +58,8 @@ std::string strReplace(std::string& str, const std::string& oldStr, const std::s
 
 bool SignStake(std::string sBitcoinAddress, std::string strMessage, std::string& sError, std::string& sSignature)
 {
+	 LOCK(cs_main);
+	 {
 		CBitcoinAddress addr(sBitcoinAddress);
 		CKeyID keyID;
 		if (!addr.GetKeyID(keyID))
@@ -84,6 +86,7 @@ bool SignStake(std::string sBitcoinAddress, std::string strMessage, std::string&
 		sSignature = EncodeBase64(&vchSig[0], vchSig.size());
 		LogPrintf("Signed message %s successfully with address %s \n", strMessage, sBitcoinAddress);
 		return true;
+	 }
 }
 
 

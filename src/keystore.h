@@ -12,7 +12,6 @@
 #include "script/script.h"
 #include "script/standard.h"
 #include "sync.h"
-#include "util.h"
 
 #include <boost/signals2/signal.hpp>
 #include <boost/variant.hpp>

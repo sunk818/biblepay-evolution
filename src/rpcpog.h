@@ -250,7 +250,6 @@ int LoadResearchers();
 std::string TeamToName(int iTeamID);
 std::string GetResearcherCPID();
 bool CreateExternalPurse(std::string& sError);
-bool GetPublicKeyFromExternalPurse(CPubKey& c);
 bool VerifyMemoryPoolCPID(CTransaction tx);
 std::string GetEPArg(bool fPublic);
 

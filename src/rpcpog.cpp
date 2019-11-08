@@ -634,33 +634,6 @@ bool CreateExternalPurse(std::string& sError)
 	return true;	
 }
 
-
-bool GetPublicKeyFromExternalPurse(CPubKey& c)
-{
-	std::string sPrivFile = GetEPArg(false);
-	std::string sPubFile = GetEPArg(true);
-	if (sPubFile.empty() || sPrivFile.empty())
-	{
-		LogPrintf("\nGetPublicKeyFromExternalPurse::Empty %s %s", sPrivFile, sPubFile);
-		return false;
-	}
-	CBitcoinSecret vchSecret;
-	bool fGood = vchSecret.SetString(sPrivFile);
-	if (!fGood)
-	{
-		LogPrintf("Bad private key (boinc) %f", 702);
-		return false;
-	}
-	CKey keyOut = vchSecret.GetKey();
-	if (!keyOut.IsValid()) 
-	{
-		LogPrintf("Key is invalid %f", 703);
-		return false;
-	}
-	c = keyOut.GetPubKey();
-	return true;
-}
-
 bool FundWithExternalPurse(std::string& sError, const CTxDestination &address, CAmount nValue, bool fSubtractFeeFromAmount, CWalletTx& wtxNew, 
 	bool fUseInstantSend, CAmount nExactAmount, std::string sOptionalData, double dMinCoinAge, std::string sPursePubKey)
 {
