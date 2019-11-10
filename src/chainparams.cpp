@@ -249,6 +249,8 @@ public:
 		consensus.FoundationAddress = "BB2BwSbDCqCqNsfc7FgWFJn4sRgnUt4tsM";
 		consensus.FoundationPODSAddress = "BScSypUZVEEY4TMz1ehyyPcS5wrnMM7WPB";
 		consensus.FoundationQTAddress = "BDcNYc8tGXmwD7QmLXbR1rk1qteTDVEjUD";
+		consensus.BurnAddress = "B4T5ciTCkWauSqVAcVKy88ofjcSasUkSYU";
+
 		consensus.nPowTargetTimespan = 24 * 60 * 60; // Biblepay: 1 day
 		consensus.nPowTargetSpacing = 7 * 60; // Biblepay: 7 minutes
 		consensus.fPowAllowMinDifficultyBlocks = false;
@@ -426,6 +428,8 @@ public:
 		consensus.FoundationAddress = "yTrEKf8XQ7y7tychC2gWuGw1hsLqBybnEN";
 		consensus.FoundationPODSAddress = "yPrVdc1kFTC19Hx4NMnwEeLFifToUcQGMs";
 		consensus.FoundationQTAddress = "ygGKQR4bYwjGaEnX8KCyzEJhht4paYCiuo";
+		consensus.BurnAddress = "yLKSrCjLQFsfVgX8RjdctZ797d54atPjnV";
+
 		consensus.nDCCSuperblockStartBlock = 4504; 
         consensus.nDCCSuperblockCycle = BLOCKS_PER_DAY; // Daily
         consensus.BIP34Height = 5001;

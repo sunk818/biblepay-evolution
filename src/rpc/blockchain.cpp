@@ -2397,7 +2397,7 @@ UniValue exec(const JSONRPCRequest& request)
 	else if (sItem == "associate")
 	{
 		if (request.params.size() != 2 && request.params.size() != 3 && request.params.size() != 4)
-			throw std::runtime_error("You must specify exec associate wcg_username wcg_verificationcode.  (WCG | LogIn | My Profile | Copy down your 'Username' AND 'VERIFICATION CODE').");
+			throw std::runtime_error("Associate v1.2: You must specify exec associate wcg_username wcg_verificationcode.  (WCG | LogIn | My Profile | Copy down your 'Username' AND 'VERIFICATION CODE').");
 
 		std::string sUserName;
 		std::string sVerificationCode;
@@ -2432,6 +2432,12 @@ UniValue exec(const JSONRPCRequest& request)
 		// Step 2 : Advertise the keypair association with the CPID (and join the researcher to the campaign).
 		if (!CheckCampaign("wcg"))
 			throw std::runtime_error("Campaign wcg does not exist.");
+
+		if (r.cpid.length() != 32)
+		{
+			throw std::runtime_error("Sorry, unable to save your researcher record because your WCG CPID is empty.  Please log into your WCG account and verify you are part of team BiblePay, and that the WCG verification code matches.");
+		}
+
 		bool fAdv = AdvertiseChristianPublicKeypair("cpk-wcg", "", sUserName + "|" + sVerificationCode + "|" + RoundToString(nID, 0) + "|" + r.cpid, "", false, fForce, 0, "", sError);
 		if (!fAdv)
 		{
@@ -3261,6 +3267,78 @@ UniValue exec(const JSONRPCRequest& request)
 		}
 
 	}
+	else if (sItem == "dws")
+	{
+		// Expirimental Feature:  Dynamic Whale Stake
+		// exec dws amount duration_in_days 0=test/1=authorize
+
+		if (request.params.size() != 4 && request.params.size() != 5)
+			throw std::runtime_error("You must specify exec dws amount duration_in_days 0=test/1=authorize [optional=SPECIFIC_STAKE_RETURN_ADDRESS (If Left Empty, we will send your stake back to your CPK)].");
+
+		double nAmt = cdbl(request.params[1].get_str(), 2);
+		double nDuration = cdbl(request.params[2].get_str(), 2);
+		double nAuthorize = cdbl(request.params[3].get_str(), 0);
+		std::string sReturnAddress = DefaultRecAddress("Christian-Public-Key");
+		CBitcoinAddress returnAddress(sReturnAddress);
+		if (request.params.size() == 5)
+		{
+			sReturnAddress = request.params[4].get_str();
+			CBitcoinAddress address(sReturnAddress);
+		}
+		if (!returnAddress.IsValid())
+			throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Biblepay return address: ") + sReturnAddress);
+
+		if (nAmt < 100 || nAmt > 1000000)
+			throw std::runtime_error("Sorry, amount must be between 100 BBP and 1,000,000 BBP.");
+
+		if (nDuration < 7 || nDuration > 365)
+			throw std::runtime_error("Sorry, duration must be between 7 days and 365 days.");
+
+		if (fProd)
+			throw std::runtime_error("Sorry, this feature can only be used in TestNet currently.");
+
+		results.push_back(Pair("Staking Amount", nAmt));
+		results.push_back(Pair("Duration", nDuration));
+		int64_t nStakeTime = GetAdjustedTime();
+		
+		int64_t nReclaimTime = (86400 * nDuration) + nStakeTime;
+
+		results.push_back(Pair("Reclaim Date", TimestampToHRDate(nReclaimTime)));
+		results.push_back(Pair("Return Address", sReturnAddress));
+		std::string sPK = "DWS-" + sReturnAddress + "-" + RoundToString(nReclaimTime, 0);
+		std::string sPayload = "<MT>DWS</MT><MK>" + sPK + "</MK><MV><dws><returnaddress>" + sReturnAddress + "</returnaddress><duration>" 
+			+ RoundToString(nDuration, 0) + "</duration><duedate>" + TimestampToHRDate(nReclaimTime) + "</duedate><amount>" + RoundToString(nAmt, 2) + "</amount></dws></MV>";
+		const Consensus::Params& consensusParams = Params().GetConsensus();
+
+		CBitcoinAddress toAddress(consensusParams.BurnAddress);
+		if (!toAddress.IsValid())
+				throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Burn-To Address: ") + consensusParams.BurnAddress);
+
+		if (nAuthorize == 1)
+		{
+			bool fSubtractFee = false;
+			bool fInstantSend = false;
+			std::string sError;
+		    CWalletTx wtx;
+		
+			bool fSent = RPCSendMoney(sError, toAddress.Get(), nAmt * COIN, fSubtractFee, wtx, fInstantSend, sPayload);
+			if (!fSent || !sError.empty())
+			{
+				results.push_back(Pair("Error (Not Sent)", sError));
+			}
+			else
+			{
+				results.push_back(Pair("Results", "Burn was successful.  You will receive your original BBP back on the Reclaim Date, plus the stake reward.  Please give the wallet an extra 24 hours after the reclaim date to process the return stake.  "));
+				results.push_back(Pair("TXID", wtx.GetHash().GetHex()));
+			}
+		}
+
+	}
+	else if (sItem == "testdws1")
+	{
+
+	}
+
 	else if (sItem == "boinc1")
 	{
 		// This command is only for dev debugging; will be removed soon.

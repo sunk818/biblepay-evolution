@@ -1837,6 +1837,15 @@ void MemorizeBlockChainPrayers(bool fDuringConnectBlock, bool fSubThread, bool f
 					{
 						dFoundationDonation += dAmount;
 					}
+					// This is for Dynamic-Whale-Staking (DWS):
+					if (sPK == consensusParams.BurnAddress)
+					{
+						// Memorize each DWS txid-vout and burn amount (later the sancs will audit each one to ensure they are mature and in the main chain). 
+						// NOTE:  This data is automatically persisted during shutdowns and reboots and loaded efficiently into memory.
+						WriteCache("dws-burn", block.vtx[n]->GetHash().GetHex(), RoundToString(dAmount, 2), GetAdjustedTime());
+					}
+
+
 				}
 				double dAge = GetAdjustedTime() - block.GetBlockTime();
 				MemorizePrayer(sPrayer, block.GetBlockTime(), dTotalSent, 0, block.vtx[n]->GetHash().GetHex(), pindex->nHeight, dFoundationDonation, dAge, 0);
@@ -3315,12 +3324,12 @@ int LoadResearchers()
 		r.wcgpoints = r.totalcredit * 7;
 		r.rac = cdbl(ExtractXML(vResearchers[i], "<expavg_credit>", "</expavg_credit>"), 10);
 		r.id = cdbl(ExtractXML(vResearchers[i], "<id>", "</id>"), 0);
-		if (r.rac > 0 && r.cpid.length() == 32)
+		if (r.id > 0 && r.cpid.length() == 32)
 		{
 			r.found = true;
 			mvResearchers[r.cpid] = r;
 			if (fDebugSpam)
-				LogPrintf(";cpid %s\n", r.cpid);
+				LogPrintf(";cpid %s - team %f, id %f, rac %f, \n", r.cpid, r.teamid, r.id, r.rac);
 		}
 	}
 	if (fDebug)
@@ -3410,3 +3419,39 @@ std::string GetEPArg(bool fPublic)
 	return sUsable;
 }
 
+void GetDWS()
+{
+
+	const Consensus::Params& consensusParams = Params().GetConsensus();
+
+	for (auto ii : mvApplicationCache) 
+	{
+		if (ii.first.first == "DWS")
+		{
+			std::pair<std::string, int64_t> v = mvApplicationCache[std::make_pair(ii.first.first, ii.first.second)];
+			int64_t nTimestamp = v.second;
+			std::string sTXID = ii.first.second;
+			//double nAmount = v.first; <- Value *Store the duration and value here
+			// Pull up the burn
+			CTransactionRef tx1;
+			uint256 hashBlock1;
+			uint256 hashInput = uint256S(sTXID);
+			std::string sBurn;
+			if (GetTransaction(hashInput, tx1, Params().GetConsensus(), hashBlock1, true))
+			{
+				//CAmount nBurnAmount = tx1.vout[hashInputOrdinal].nValue;
+				for (unsigned int i = 0; i < tx1->vout.size(); i++)
+				{
+					std::string sPK = PubKeyToAddress(tx1->vout[i].scriptPubKey);
+
+					if (sPK == consensusParams.BurnAddress)
+					{
+						sBurn = tx1->vout[i].sTxOutMessage;
+    					double dAmount = tx1->vout[i].nValue / COIN;
+						LogPrintf("\nDWS TxID %s, Msg %s, Amount %f \n", sTXID, sBurn, dAmount);
+					}
+				}
+			}
+		}
+	}
+}

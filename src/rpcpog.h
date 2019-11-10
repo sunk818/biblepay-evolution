@@ -252,5 +252,6 @@ std::string GetResearcherCPID();
 bool CreateExternalPurse(std::string& sError);
 bool VerifyMemoryPoolCPID(CTransaction tx);
 std::string GetEPArg(bool fPublic);
+void GetDWS();
 
 #endif

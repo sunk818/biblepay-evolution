@@ -143,6 +143,8 @@ struct Params {
 	std::string FoundationAddress;
 	std::string FoundationPODSAddress;
 	std::string FoundationQTAddress;
+	std::string BurnAddress;
+
 	int nDCCSuperblockStartBlock;
 	int nDCCSuperblockCycle;
 	int QTHeight;

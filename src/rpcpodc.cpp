@@ -310,7 +310,9 @@ Researcher GetResearcherByID(int nID)
     BOOST_FOREACH(const PAIRTYPE(const std::string, Researcher)& myResearcher, mvResearchers)
     {
 		if (myResearcher.second.found && myResearcher.second.id == nID)
-			return myResearcher.second;
+		{
+			return mvResearchers[myResearcher.second.cpid];
+		}
 	}
 	Researcher r;
 	r.found = false;
